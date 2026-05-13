@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LOVE.EXE</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0a;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+      overflow: hidden;
+    }
+
+    #game-container {
+      position: relative;
+      width: 800px;
+      height: 600px;
+      border: 2px solid #ff69b4;
+      box-shadow: 0 0 30px #ff69b488;
+      overflow: hidden;
+      image-rendering: pixelated;
+    }
+
+    /* ── SCREENS ── */
+    .screen {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .screen.active { display: flex; }
+
+    /* ── TITLE SCREEN ── */
+    #screen-title {
+      background: #0d0d1a;
+    }
+    #screen-title h1 {
+      font-size: 56px;
+      color: #ff69b4;
+      text-shadow: 0 0 20px #ff69b4, 3px 3px 0 #a0003a;
+      letter-spacing: 4px;
+      margin-bottom: 8px;
+    }
+    #screen-title .subtitle {
+      color: #ffb3d9;
+      font-size: 14px;
+      margin-bottom: 60px;
+      letter-spacing: 2px;
+    }
+    .pixel-btn {
+      background: #ff69b4;
+      color: #0d0d1a;
+      border: none;
+      padding: 12px 32px;
+      font-family: 'Courier New', monospace;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+      margin: 6px;
+      image-rendering: pixelated;
+      box-shadow: 4px 4px 0 #a0003a;
+      transition: transform 0.05s, box-shadow 0.05s;
+      letter-spacing: 1px;
+    }
+    .pixel-btn:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #a0003a; }
+    .pixel-btn:active { transform: translate(4px, 4px); box-shadow: none; }
+    .pixel-btn.secondary {
+      background: #1a1a2e;
+      color: #ff69b4;
+      border: 2px solid #ff69b4;
+      box-shadow: 4px 4px 0 #a0003a;
+    }
+    .pixel-stars {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    .star {
+      position: absolute;
+      width: 3px; height: 3px;
+      background: #fff;
+      animation: twinkle 2s infinite;
+    }
+    @keyframes twinkle {
+      0%, 100% { opacity: 1; } 50% { opacity: 0.2; }
+    }
+
+    /* ── HUD ── */
+    #hud {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 48px;
+      background: #0d0d1aee;
+      border-bottom: 2px solid #ff69b4;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 20px;
+      z-index: 100;
+      pointer-events: none;
+    }
+    #hud .hud-hearts { display: flex; gap: 4px; align-items: center; }
+    .hud-heart { font-size: 20px; }
+    #hud .hud-coins { color: #ffd700; font-size: 14px; }
+    #hud .hud-affinity { color: #ff69b4; font-size: 12px; margin-left: auto; }
+    #hud .hud-label { font-size: 11px; color: #888; margin-right: 4px; }
+
+    /* ── GAME SCREEN (world map) ── */
+    #screen-game {
+      background: #1a2a1a;
+      cursor: default;
+    }
+    #game-canvas {
+      position: absolute;
+      top: 48px; left: 0;
+      width: 800px;
+      height: 552px;
+      image-rendering: pixelated;
+    }
+
+    /* ── DIALOGUE BOX ── */
+    #dialogue-box {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      height: 160px;
+      background: #0d0d1af0;
+      border-top: 3px solid #ff69b4;
+      padding: 14px 20px 10px;
+      display: none;
+      flex-direction: column;
+      z-index: 200;
+    }
+    #dialogue-box.active { display: flex; }
+    #dialogue-speaker {
+      color: #ff69b4;
+      font-size: 13px;
+      font-weight: bold;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
+    #dialogue-text {
+      color: #eee;
+      font-size: 14px;
+      line-height: 1.6;
+      flex: 1;
+    }
+    #dialogue-choices {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 8px;
+    }
+    .choice-btn {
+      background: #1a1a2e;
+      color: #ffb3d9;
+      border: 1px solid #ff69b4;
+      padding: 5px 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      text-align: left;
+    }
+    .choice-btn:hover { background: #ff69b4; color: #0d0d1a; }
+    #dialogue-next {
+      align-self: flex-end;
+      color: #ff69b4;
+      font-size: 11px;
+      animation: blink 1s infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+    /* ── NOTIFICATION TOAST ── */
+    #toast {
+      position: absolute;
+      top: 60px; left: 50%;
+      transform: translateX(-50%);
+      background: #1a1a2eee;
+      border: 2px solid #ff69b4;
+      color: #ffb3d9;
+      padding: 8px 24px;
+      font-size: 13px;
+      z-index: 300;
+      display: none;
+      white-space: nowrap;
+    }
+    #toast.active { display: block; animation: fadeToast 2s forwards; }
+    @keyframes fadeToast { 0%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
+
+    /* ── MINI-GAME SCREENS ── */
+    #screen-minigame {
+      background: #0d0d1a;
+      flex-direction: column;
+    }
+    #minigame-title {
+      font-size: 22px;
+      color: #ff69b4;
+      margin-bottom: 4px;
+      text-shadow: 2px 2px 0 #a0003a;
+      letter-spacing: 2px;
+    }
+    #minigame-subtitle {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 20px;
+    }
+    #minigame-area {
+      width: 700px;
+      height: 400px;
+      background: #0a0a18;
+      border: 2px solid #ff69b4;
+      position: relative;
+      overflow: hidden;
+      image-rendering: pixelated;
+    }
+    #minigame-hud {
+      width: 700px;
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+      font-size: 13px;
+      color: #ffb3d9;
+    }
+    #minigame-result {
+      position: absolute;
+      inset: 0;
+      background: #0d0d1af0;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+    #minigame-result.active { display: flex; }
+    #result-title { font-size: 36px; margin-bottom: 12px; }
+    #result-body { font-size: 14px; color: #ccc; margin-bottom: 24px; text-align: center; line-height: 1.8; }
+
+    /* ── ENDING SCREEN ── */
+    #screen-ending {
+      background: #0d0d1a;
+      flex-direction: column;
+      text-align: center;
+      padding: 40px;
+    }
+    #ending-title {
+      font-size: 28px;
+      color: #ff69b4;
+      text-shadow: 2px 2px 0 #a0003a;
+      margin-bottom: 20px;
+      letter-spacing: 2px;
+    }
+    #ending-image-placeholder {
+      width: 320px; height: 200px;
+      background: #1a1a2e;
+      border: 2px solid #ff69b4;
+      display: flex; align-items: center; justify-content: center;
+      color: #555; font-size: 12px;
+      margin: 0 auto 20px;
+    }
+    #ending-body {
+      font-size: 15px;
+      color: #ddd;
+      line-height: 1.9;
+      max-width: 500px;
+      margin-bottom: 24px;
+      white-space: pre-line;
+    }
+
+    /* ── BOOTH LABELS on map ── */
+    .booth-label {
+      position: absolute;
+      background: #ff69b4cc;
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 6px;
+      pointer-events: none;
+      font-family: 'Courier New', monospace;
+      border: 1px solid #fff4;
+    }
+  </style>
+</head>
+<body>
+<div id="game-container">
+
+  <!-- ═══ TITLE SCREEN ═══ -->
+  <div id="screen-title" class="screen active">
+    <div class="pixel-stars" id="stars-container"></div>
+    <h1>LOVE.EXE</h1>
+    <div class="subtitle">▸ an 8-bit romance at NTHU ◂</div>
+    <button class="pixel-btn" onclick="Game.startNewGame()">▶ START GAME</button>
+    <button class="pixel-btn secondary" onclick="Game.showCredits()">CREDITS</button>
+  </div>
+
+  <!-- ═══ GAME / WORLD MAP SCREEN ═══ -->
+  <div id="screen-game" class="screen">
+    <!-- HUD -->
+    <div id="hud">
+      <span class="hud-label">HEARTS</span>
+      <div class="hud-hearts" id="hud-hearts"></div>
+      <span class="hud-label" style="margin-left:12px">COINS</span>
+      <span class="hud-coins" id="hud-coins">0</span>
+      <span class="hud-affinity" id="hud-affinity">Affinity: 0</span>
+    </div>
+
+    <!-- Main game canvas -->
+    <canvas id="game-canvas" width="800" height="552"></canvas>
+
+    <!-- Dialogue overlay -->
+    <div id="dialogue-box">
+      <div id="dialogue-speaker"></div>
+      <div id="dialogue-text"></div>
+      <div id="dialogue-choices"></div>
+      <div id="dialogue-next">▼ Press E to continue</div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast"></div>
+  </div>
+
+  <!-- ═══ MINI-GAME SCREEN ═══ -->
+  <div id="screen-minigame" class="screen">
+    <div id="minigame-title"></div>
+    <div id="minigame-subtitle"></div>
+    <div id="minigame-area">
+      <canvas id="minigame-canvas" width="700" height="400" style="image-rendering:pixelated"></canvas>
+      <div id="minigame-result">
+        <div id="result-title"></div>
+        <div id="result-body"></div>
+        <button class="pixel-btn" id="result-btn">Continue</button>
+      </div>
+    </div>
+    <div id="minigame-hud">
+      <span id="mg-left"></span>
+      <span id="mg-center"></span>
+      <span id="mg-right"></span>
+    </div>
+  </div>
+
+  <!-- ═══ ENDING SCREEN ═══ -->
+  <div id="screen-ending" class="screen">
+    <div id="ending-title"></div>
+    <div id="ending-image-placeholder" id="ending-image">[ CG IMAGE ]</div>
+    <div id="ending-body"></div>
+    <button class="pixel-btn" id="ending-next-btn">Next ▶</button>
+    <button class="pixel-btn secondary" style="margin-top:8px" onclick="Game.backToTitle()">Play Again</button>
+  </div>
+
+</div>
+
+<!-- ── SCRIPTS ── -->
+<script src="src/core/GameManager.js"></script>
+<script src="src/core/PlayerController.js"></script>
+<script src="src/ui/DialogueSystem.js"></script>
+<script src="src/ui/HUDController.js"></script>
+<script src="src/core/EndingManager.js"></script>
+<script src="src/minigames/MiniGame_Professor.js"></script>
+<script src="src/minigames/MiniGame_NiuPai.js"></script>
+<script src="src/minigames/MiniGame_Father.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>
