@@ -8,290 +8,181 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: #0a0a0a;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
       min-height: 100vh;
       font-family: 'Courier New', monospace;
-      color: #fff;
-      overflow: hidden;
+      color: #fff; overflow: hidden;
     }
-
     #game-container {
-      position: relative;
-      width: 800px;
-      height: 600px;
+      position: relative; width: 800px; height: 600px;
       border: 2px solid #ff69b4;
       box-shadow: 0 0 30px #ff69b488;
-      overflow: hidden;
-      image-rendering: pixelated;
+      overflow: hidden; image-rendering: pixelated;
     }
 
     /* ── SCREENS ── */
-    .screen {
-      position: absolute;
-      inset: 0;
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
+    .screen { position: absolute; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; }
     .screen.active { display: flex; }
 
-    /* ── TITLE SCREEN ── */
-    #screen-title {
-      background: #0d0d1a;
-    }
+    /* ── TITLE ── */
+    #screen-title { background: #0d0d1a; }
     #screen-title h1 {
-      font-size: 56px;
-      color: #ff69b4;
+      font-size: 56px; color: #ff69b4;
       text-shadow: 0 0 20px #ff69b4, 3px 3px 0 #a0003a;
-      letter-spacing: 4px;
-      margin-bottom: 8px;
+      letter-spacing: 4px; margin-bottom: 8px;
     }
-    #screen-title .subtitle {
-      color: #ffb3d9;
-      font-size: 14px;
-      margin-bottom: 60px;
-      letter-spacing: 2px;
-    }
+    #screen-title .subtitle { color: #ffb3d9; font-size: 14px; margin-bottom: 60px; letter-spacing: 2px; }
     .pixel-btn {
-      background: #ff69b4;
-      color: #0d0d1a;
-      border: none;
-      padding: 12px 32px;
-      font-family: 'Courier New', monospace;
-      font-size: 16px;
-      font-weight: bold;
-      cursor: pointer;
-      margin: 6px;
-      image-rendering: pixelated;
+      background: #ff69b4; color: #0d0d1a; border: none;
+      padding: 12px 32px; font-family: 'Courier New', monospace;
+      font-size: 16px; font-weight: bold; cursor: pointer; margin: 6px;
       box-shadow: 4px 4px 0 #a0003a;
-      transition: transform 0.05s, box-shadow 0.05s;
-      letter-spacing: 1px;
+      transition: transform 0.05s, box-shadow 0.05s; letter-spacing: 1px;
     }
-    .pixel-btn:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0 #a0003a; }
-    .pixel-btn:active { transform: translate(4px, 4px); box-shadow: none; }
+    .pixel-btn:hover  { transform: translate(2px,2px); box-shadow: 2px 2px 0 #a0003a; }
+    .pixel-btn:active { transform: translate(4px,4px); box-shadow: none; }
     .pixel-btn.secondary {
-      background: #1a1a2e;
-      color: #ff69b4;
-      border: 2px solid #ff69b4;
-      box-shadow: 4px 4px 0 #a0003a;
+      background: #1a1a2e; color: #ff69b4;
+      border: 2px solid #ff69b4; box-shadow: 4px 4px 0 #a0003a;
     }
-    .pixel-stars {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      overflow: hidden;
-    }
-    .star {
-      position: absolute;
-      width: 3px; height: 3px;
-      background: #fff;
-      animation: twinkle 2s infinite;
-    }
-    @keyframes twinkle {
-      0%, 100% { opacity: 1; } 50% { opacity: 0.2; }
-    }
+    .pixel-stars { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+    .star { position: absolute; width: 3px; height: 3px; background: #fff; animation: twinkle 2s infinite; }
+    @keyframes twinkle { 0%,100%{opacity:1} 50%{opacity:.2} }
 
     /* ── HUD ── */
     #hud {
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 48px;
-      background: #0d0d1aee;
-      border-bottom: 2px solid #ff69b4;
-      display: flex;
-      align-items: center;
-      padding: 0 16px;
-      gap: 20px;
-      z-index: 100;
-      pointer-events: none;
+      position: absolute; top: 0; left: 0; right: 0; height: 48px;
+      background: #0d0d1aee; border-bottom: 2px solid #ff69b4;
+      display: flex; align-items: center; padding: 0 14px; gap: 14px;
+      z-index: 100; pointer-events: none;
     }
-    #hud .hud-hearts { display: flex; gap: 4px; align-items: center; }
-    .hud-heart { font-size: 20px; }
-    #hud .hud-coins { color: #ffd700; font-size: 14px; }
-    #hud .hud-affinity { color: #ff69b4; font-size: 12px; margin-left: auto; }
-    #hud .hud-label { font-size: 11px; color: #888; margin-right: 4px; }
+    .hud-label { font-size: 10px; color: #888; }
 
-    /* ── GAME SCREEN (world map) ── */
-    #screen-game {
-      background: #1a2a1a;
-      cursor: default;
+    /* HP bar — 4 slots */
+    #hud-hp { display: flex; gap: 5px; align-items: center; }
+    .hp-slot {
+      width: 26px; height: 20px; border: 2px solid #ff69b4;
+      border-radius: 2px; transition: background .2s;
     }
-    #game-canvas {
-      position: absolute;
-      top: 48px; left: 0;
-      width: 800px;
-      height: 552px;
-      image-rendering: pixelated;
-    }
+    .hp-full  { background: #ff69b4; box-shadow: 0 0 6px #ff69b4aa; }
+    .hp-empty { background: #1a0a1a; }
 
-    /* ── DIALOGUE BOX ── */
+    /* Heart fragments */
+    #hud-hearts { display: flex; gap: 3px; align-items: center; }
+    .hud-heart { font-size: 18px; }
+
+    #hud-coins    { color: #ffd700; font-size: 13px; }
+    #hud-affinity { color: #ff69b4; font-size: 12px; margin-left: auto; }
+
+    /* ── GAME SCREEN ── */
+    #screen-game { background: #1a2a1a; cursor: default; }
+    #game-canvas  { position: absolute; top: 48px; left: 0; width: 800px; height: 552px; image-rendering: pixelated; }
+
+    /* ── DIALOGUE ── */
     #dialogue-box {
-      position: absolute;
-      bottom: 0; left: 0; right: 0;
-      height: 160px;
-      background: #0d0d1af0;
-      border-top: 3px solid #ff69b4;
-      padding: 14px 20px 10px;
-      display: none;
-      flex-direction: column;
-      z-index: 200;
+      position: absolute; bottom: 0; left: 0; right: 0; height: 160px;
+      background: #0d0d1af2; border-top: 3px solid #ff69b4;
+      padding: 14px 20px 10px; display: none; flex-direction: column; z-index: 200;
     }
     #dialogue-box.active { display: flex; }
-    #dialogue-speaker {
-      color: #ff69b4;
-      font-size: 13px;
-      font-weight: bold;
-      margin-bottom: 6px;
-      letter-spacing: 1px;
-    }
-    #dialogue-text {
-      color: #eee;
-      font-size: 14px;
-      line-height: 1.6;
-      flex: 1;
-    }
-    #dialogue-choices {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      margin-top: 8px;
-    }
+    #dialogue-speaker { color: #ff69b4; font-size: 13px; font-weight: bold; margin-bottom: 6px; letter-spacing: 1px; }
+    #dialogue-text    { color: #eee; font-size: 14px; line-height: 1.6; flex: 1; }
+    #dialogue-choices { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
     .choice-btn {
-      background: #1a1a2e;
-      color: #ffb3d9;
-      border: 1px solid #ff69b4;
-      padding: 5px 12px;
-      font-family: 'Courier New', monospace;
-      font-size: 12px;
-      cursor: pointer;
-      text-align: left;
+      background: #1a1a2e; color: #ffb3d9; border: 1px solid #ff69b4;
+      padding: 5px 12px; font-family: 'Courier New', monospace;
+      font-size: 12px; cursor: pointer; text-align: left;
     }
     .choice-btn:hover { background: #ff69b4; color: #0d0d1a; }
-    #dialogue-next {
-      align-self: flex-end;
-      color: #ff69b4;
-      font-size: 11px;
-      animation: blink 1s infinite;
-    }
+    #dialogue-next { align-self: flex-end; color: #ff69b4; font-size: 11px; animation: blink 1s infinite; }
     @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
 
-    /* ── NOTIFICATION TOAST ── */
+    /* ── TOAST ── */
     #toast {
-      position: absolute;
-      top: 60px; left: 50%;
-      transform: translateX(-50%);
-      background: #1a1a2eee;
-      border: 2px solid #ff69b4;
-      color: #ffb3d9;
-      padding: 8px 24px;
-      font-size: 13px;
-      z-index: 300;
-      display: none;
-      white-space: nowrap;
+      position: absolute; top: 60px; left: 50%; transform: translateX(-50%);
+      background: #1a1a2eee; border: 2px solid #ff69b4; color: #ffb3d9;
+      padding: 8px 24px; font-size: 13px; z-index: 300;
+      display: none; white-space: nowrap;
     }
-    #toast.active { display: block; animation: fadeToast 2s forwards; }
+    #toast.active { display: block; animation: fadeToast 2.2s forwards; }
     @keyframes fadeToast { 0%{opacity:1} 70%{opacity:1} 100%{opacity:0} }
 
-    /* ── MINI-GAME SCREENS ── */
-    #screen-minigame {
-      background: #0d0d1a;
-      flex-direction: column;
+    /* ── HEART FRAGMENT OVERLAY (Zelda-style) ── */
+    #heart-fragment-overlay {
+      position: absolute; inset: 0; background: #000000cc;
+      display: none; flex-direction: column;
+      align-items: center; justify-content: center; z-index: 400;
     }
-    #minigame-title {
-      font-size: 22px;
-      color: #ff69b4;
-      margin-bottom: 4px;
-      text-shadow: 2px 2px 0 #a0003a;
-      letter-spacing: 2px;
+    #heart-fragment-overlay.active { display: flex; animation: fadeIn .4s; }
+    @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+    #heart-fragment-overlay .hf-box {
+      border: 3px solid #ff69b4; background: #0d0d1a;
+      padding: 28px 48px; text-align: center;
+      box-shadow: 0 0 40px #ff69b4aa;
     }
-    #minigame-subtitle {
-      font-size: 12px;
-      color: #888;
-      margin-bottom: 20px;
-    }
+    #heart-fragment-overlay .hf-icon { font-size: 52px; margin-bottom: 10px; animation: heartPop .5s .2s both; }
+    @keyframes heartPop { 0%{transform:scale(0)} 70%{transform:scale(1.3)} 100%{transform:scale(1)} }
+    #heart-fragment-overlay .hf-title { font-size: 20px; color: #ff69b4; margin-bottom: 6px; letter-spacing: 2px; }
+    #heart-fragment-overlay .hf-label { font-size: 12px; color: #aaa; margin-bottom: 18px; }
+    #heart-fragment-overlay .hf-bar-bg { width: 200px; height: 14px; background: #1a0a1a; border: 2px solid #ff69b4; margin: 0 auto; }
+    #heart-fill-bar { height: 100%; background: #ff69b4; width: 0%; transition: width 2s ease; box-shadow: 0 0 8px #ff69b4; }
+
+    /* ── MINI-GAME ── */
+    #screen-minigame { background: #0d0d1a; flex-direction: column; }
+    #minigame-title    { font-size: 22px; color: #ff69b4; margin-bottom: 4px; text-shadow: 2px 2px 0 #a0003a; letter-spacing: 2px; }
+    #minigame-subtitle { font-size: 12px; color: #888; margin-bottom: 16px; }
     #minigame-area {
-      width: 700px;
-      height: 400px;
-      background: #0a0a18;
-      border: 2px solid #ff69b4;
-      position: relative;
-      overflow: hidden;
-      image-rendering: pixelated;
+      width: 700px; height: 400px; background: #0a0a18;
+      border: 2px solid #ff69b4; position: relative; overflow: hidden; image-rendering: pixelated;
     }
-    #minigame-hud {
-      width: 700px;
-      display: flex;
-      justify-content: space-between;
-      margin-top: 10px;
-      font-size: 13px;
-      color: #ffb3d9;
-    }
+    #minigame-hud { width: 700px; display: flex; justify-content: space-between; margin-top: 10px; font-size: 13px; color: #ffb3d9; }
     #minigame-result {
-      position: absolute;
-      inset: 0;
-      background: #0d0d1af0;
-      display: none;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 50;
+      position: absolute; inset: 0; background: #0d0d1af2;
+      display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 50;
     }
     #minigame-result.active { display: flex; }
-    #result-title { font-size: 36px; margin-bottom: 12px; }
-    #result-body { font-size: 14px; color: #ccc; margin-bottom: 24px; text-align: center; line-height: 1.8; }
+    #result-title { font-size: 32px; margin-bottom: 12px; }
+    #result-body  { font-size: 14px; color: #ccc; margin-bottom: 24px; text-align: center; line-height: 1.9; }
 
-    /* ── ENDING SCREEN ── */
+    /* ── ENDING ── */
     #screen-ending {
-      background: #0d0d1a;
-      flex-direction: column;
-      text-align: center;
-      padding: 40px;
+      background: #0d0d1a; flex-direction: column;
+      text-align: center; padding: 24px 40px; gap: 10px;
     }
-    #ending-title {
-      font-size: 28px;
-      color: #ff69b4;
-      text-shadow: 2px 2px 0 #a0003a;
-      margin-bottom: 20px;
-      letter-spacing: 2px;
-    }
-    #ending-image-placeholder {
-      width: 320px; height: 200px;
-      background: #1a1a2e;
-      border: 2px solid #ff69b4;
-      display: flex; align-items: center; justify-content: center;
-      color: #555; font-size: 12px;
-      margin: 0 auto 20px;
-    }
-    #ending-body {
-      font-size: 15px;
-      color: #ddd;
-      line-height: 1.9;
-      max-width: 500px;
-      margin-bottom: 24px;
-      white-space: pre-line;
-    }
+    #ending-title { font-size: 24px; color: #ff69b4; text-shadow: 2px 2px 0 #a0003a; letter-spacing: 2px; }
+    #ending-cg-canvas { width: 360px; height: 220px; border: 2px solid #ff69b4; image-rendering: pixelated; }
+    #ending-body { font-size: 13px; color: #ddd; line-height: 1.9; max-width: 500px; white-space: pre-line; }
 
-    /* ── BOOTH LABELS on map ── */
-    .booth-label {
-      position: absolute;
-      background: #ff69b4cc;
-      color: #fff;
-      font-size: 10px;
-      padding: 2px 6px;
-      pointer-events: none;
-      font-family: 'Courier New', monospace;
-      border: 1px solid #fff4;
+    /* ── CUTSCENE OVERLAY ── */
+    #cutscene-overlay {
+      position: absolute; inset: 0; background: #000000dd;
+      display: none; align-items: center; justify-content: center;
+      z-index: 500; gap: 28px;
     }
+    #cutscene-overlay.active { display: flex; animation: fadeIn .3s; }
+    #cs-canvas { width: 160px; height: 180px; image-rendering: pixelated; border: 2px solid #ff69b4; flex-shrink: 0; }
+    #cs-text {
+      max-width: 320px; color: #eee; font-size: 14px; line-height: 1.9;
+      white-space: pre-line; transition: opacity .3s;
+      border-left: 3px solid #ff69b4; padding-left: 16px;
+    }
+    #cs-hint { position: absolute; bottom: 20px; right: 24px; color: #ff69b4; font-size: 11px; animation: blink 1s infinite; }
+
+    /* ── MUTE BUTTON ── */
+    #mute-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: none; border: 1px solid #ff69b444; color: #ff69b4;
+      font-size: 16px; cursor: pointer; padding: 2px 8px; z-index: 150;
+      font-family: 'Courier New', monospace;
+    }
+    #mute-btn:hover { background: #ff69b422; }
   </style>
 </head>
 <body>
 <div id="game-container">
 
-  <!-- ═══ TITLE SCREEN ═══ -->
+  <!-- ═══ TITLE ═══ -->
   <div id="screen-title" class="screen active">
     <div class="pixel-stars" id="stars-container"></div>
     <h1>LOVE.EXE</h1>
@@ -300,33 +191,46 @@
     <button class="pixel-btn secondary" onclick="Game.showCredits()">CREDITS</button>
   </div>
 
-  <!-- ═══ GAME / WORLD MAP SCREEN ═══ -->
+  <!-- ═══ GAME MAP ═══ -->
   <div id="screen-game" class="screen">
-    <!-- HUD -->
     <div id="hud">
-      <span class="hud-label">HEARTS</span>
-      <div class="hud-hearts" id="hud-hearts"></div>
-      <span class="hud-label" style="margin-left:12px">COINS</span>
-      <span class="hud-coins" id="hud-coins">0</span>
-      <span class="hud-affinity" id="hud-affinity">Affinity: 0</span>
+      <span class="hud-label">HP</span>
+      <div id="hud-hp"></div>
+      <span class="hud-label" style="margin-left:10px">💗</span>
+      <div id="hud-hearts"></div>
+      <span class="hud-label" style="margin-left:10px">🪙</span>
+      <span id="hud-coins">0</span>
+      <span id="hud-affinity" style="margin-left:auto">♥ 0</span>
     </div>
-
-    <!-- Main game canvas -->
+    <button id="mute-btn" onclick="AudioManager.toggleMute(); this.textContent = this.textContent === '🔊' ? '🔇' : '🔊'">🔊</button>
     <canvas id="game-canvas" width="800" height="552"></canvas>
-
-    <!-- Dialogue overlay -->
     <div id="dialogue-box">
       <div id="dialogue-speaker"></div>
       <div id="dialogue-text"></div>
       <div id="dialogue-choices"></div>
       <div id="dialogue-next">▼ Press E to continue</div>
     </div>
-
-    <!-- Toast notification -->
     <div id="toast"></div>
+
+    <!-- Cutscene Overlay (Mei reaction) -->
+    <div id="cutscene-overlay">
+      <canvas id="cs-canvas" width="160" height="180"></canvas>
+      <div id="cs-text"></div>
+      <div id="cs-hint">▼ Press E or Click to continue</div>
+    </div>
+
+    <!-- Heart Fragment Overlay -->
+    <div id="heart-fragment-overlay">
+      <div class="hf-box">
+        <div class="hf-icon">💗</div>
+        <div class="hf-title">You found a piece of Heart!</div>
+        <div class="hf-label" id="heart-fragment-label"></div>
+        <div class="hf-bar-bg"><div id="heart-fill-bar"></div></div>
+      </div>
+    </div>
   </div>
 
-  <!-- ═══ MINI-GAME SCREEN ═══ -->
+  <!-- ═══ MINI-GAME ═══ -->
   <div id="screen-minigame" class="screen">
     <div id="minigame-title"></div>
     <div id="minigame-subtitle"></div>
@@ -345,26 +249,30 @@
     </div>
   </div>
 
-  <!-- ═══ ENDING SCREEN ═══ -->
+  <!-- ═══ ENDING ═══ -->
   <div id="screen-ending" class="screen">
     <div id="ending-title"></div>
-    <div id="ending-image-placeholder" id="ending-image">[ CG IMAGE ]</div>
+    <canvas id="ending-cg-canvas" width="360" height="220"></canvas>
     <div id="ending-body"></div>
     <button class="pixel-btn" id="ending-next-btn">Next ▶</button>
-    <button class="pixel-btn secondary" style="margin-top:8px" onclick="Game.backToTitle()">Play Again</button>
+    <button class="pixel-btn secondary" onclick="Game.backToTitle()">🏠 Play Again</button>
   </div>
 
 </div>
 
-<!-- ── SCRIPTS ── -->
+<script src="src/core/AudioManager.js"></script>
 <script src="src/core/GameManager.js"></script>
+<script src="src/core/ItemManager.js"></script>
+<script src="src/core/NPCManager.js"></script>
 <script src="src/core/PlayerController.js"></script>
 <script src="src/ui/DialogueSystem.js"></script>
 <script src="src/ui/HUDController.js"></script>
+<script src="src/ui/CutsceneManager.js"></script>
 <script src="src/core/EndingManager.js"></script>
 <script src="src/minigames/MiniGame_Professor.js"></script>
 <script src="src/minigames/MiniGame_NiuPai.js"></script>
 <script src="src/minigames/MiniGame_Father.js"></script>
+<script src="src/minigames/MiniGame_FinalBoss.js"></script>
 <script src="src/main.js"></script>
 </body>
 </html>

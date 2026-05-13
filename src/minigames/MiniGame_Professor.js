@@ -2,249 +2,277 @@
 
 /**
  * MiniGame_Professor — "Circuit Pulse"
- * Logic-gate puzzle: place missing gate (AND/OR/NOT) to make output match target.
+ * Logic-gate puzzle: choose the correct gate (AND/OR/NOT/NAND/XOR) to match output.
  * Win: solve 3 circuits in 60 seconds.
+ * Fix: options are objects {label, rect} so clicks work correctly.
  */
 const MiniGame_Professor = (() => {
 
   const TOTAL_ROUNDS = 3;
   const TIME_LIMIT   = 60;
-  const BONUS_TIME   = 5;
 
-  let round, score, timeLeft, solved, failed, timerInterval, animFrame;
+  let round, score, timeLeft, failed, timerInterval, animFrame;
   let puzzle = null;
-  let selectedGate = null;
   let gameActive = false;
+  let clickHandler = null;
 
-  // Possible gate types
-  const GATES = ['AND', 'OR', 'NOT'];
+  const ALL_GATES = ['AND', 'OR', 'NOT', 'NAND', 'XOR'];
 
-  // ── Puzzle generation ─────────────────────────────────────
   function genPuzzle() {
-    const gateType = GATES[Math.floor(Math.random() * GATES.length)];
+    const gateType = ALL_GATES[Math.floor(Math.random() * ALL_GATES.length)];
     const a = Math.round(Math.random());
     const b = Math.round(Math.random());
     let expected;
-    if (gateType === 'AND') expected = a & b;
-    else if (gateType === 'OR')  expected = a | b;
-    else                          expected = a ? 0 : 1; // NOT a
+    if      (gateType === 'AND')  expected = a & b;
+    else if (gateType === 'OR')   expected = a | b;
+    else if (gateType === 'NOT')  expected = a ? 0 : 1;
+    else if (gateType === 'NAND') expected = (a & b) ? 0 : 1;
+    else                          expected = a ^ b;  // XOR
 
-    // Shuffle wrong answers
-    const options = [...GATES].sort(() => Math.random() - 0.5);
-    return { gateType, a, b, expected, options };
+    // Build 4 options: correct + 3 random wrong, shuffled
+    const wrong = ALL_GATES.filter(g => g !== gateType).sort(() => Math.random() - 0.5).slice(0, 3);
+    const opts  = [gateType, ...wrong].sort(() => Math.random() - 0.5);
+
+    // options are objects so we can attach rect without mutating strings
+    return {
+      gateType, a, b, expected,
+      options: opts.map(label => ({ label, rect: null })),
+    };
   }
 
   // ── Public API ────────────────────────────────────────────
   function start() {
-    round = 0; score = 0; timeLeft = TIME_LIMIT;
-    solved = 0; failed = 0; gameActive = true;
-    selectedGate = null;
-
-    HUDController.setMiniGameTitle('CIRCUIT PULSE', 'Solve 3 logic circuits before time runs out!');
-    HUDController.updateMiniGameHUD(`Round: ${round+1}/${TOTAL_ROUNDS}`, `Score: ${score}`, `Time: ${timeLeft}s`);
-
+    round = 0; score = 0; timeLeft = TIME_LIMIT; failed = 0;
+    gameActive = true;
     puzzle = genPuzzle();
+
+    HUDController.setMiniGameTitle('CIRCUIT PULSE', 'Click the correct logic gate to match the output!');
+    HUDController.updateMiniGameHUD(`Round: 1/${TOTAL_ROUNDS}`, `Score: ${score}`, `⏱ ${timeLeft}s`);
+
     timerInterval = setInterval(tick, 1000);
     animFrame = requestAnimationFrame(render);
+
+    const canvas = document.getElementById('minigame-canvas');
+    clickHandler = handleClick.bind(null);
+    canvas.addEventListener('click', clickHandler);
   }
 
   function stop() {
     gameActive = false;
     clearInterval(timerInterval);
     cancelAnimationFrame(animFrame);
+    const canvas = document.getElementById('minigame-canvas');
+    if (canvas && clickHandler) canvas.removeEventListener('click', clickHandler);
+    clickHandler = null;
   }
 
   function tick() {
     if (!gameActive) return;
     timeLeft--;
-    HUDController.updateMiniGameHUD(`Round: ${round+1}/${TOTAL_ROUNDS}`, `Score: ${score}`, `Time: ${timeLeft}s`);
-    if (timeLeft <= 0) loseGame('Time\'s up!');
+    HUDController.updateMiniGameHUD(`Round: ${round+1}/${TOTAL_ROUNDS}`, `Score: ${score}`, `⏱ ${timeLeft}s`);
+    if (timeLeft <= 0) loseGame("Time's up!");
   }
 
-  function pickGate(gate) {
+  function handleClick(e) {
     if (!gameActive || !puzzle) return;
-    selectedGate = gate;
-    checkAnswer();
+    const canvas = document.getElementById('minigame-canvas');
+    const rect   = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (700 / rect.width);
+    const my = (e.clientY - rect.top)  * (400 / rect.height);
+
+    for (const opt of puzzle.options) {
+      if (!opt.rect) continue;
+      const r = opt.rect;
+      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
+        pickGate(opt.label);
+        return;
+      }
+    }
   }
 
-  function checkAnswer() {
-    if (!puzzle) return;
-    const correct = selectedGate === puzzle.gateType;
+  function pickGate(label) {
+    if (!gameActive) return;
+    const correct = label === puzzle.gateType;
     if (correct) {
-      const bonus = timeLeft > (TIME_LIMIT - BONUS_TIME) ? 10 : 0;
+      const bonus = timeLeft > TIME_LIMIT - 8 ? 10 : 0;
       score += 20 + bonus;
-      solved++;
-      HUDController.showToast(bonus ? `Correct! +30 pts (BONUS!)` : 'Correct! +20 pts');
+      HUDController.showToast(bonus ? '⚡ FAST! +30 pts' : '✓ Correct! +20 pts');
       round++;
       if (round >= TOTAL_ROUNDS) {
         winGame();
       } else {
         puzzle = genPuzzle();
-        selectedGate = null;
-        HUDController.updateMiniGameHUD(`Round: ${round+1}/${TOTAL_ROUNDS}`, `Score: ${score}`, `Time: ${timeLeft}s`);
+        HUDController.updateMiniGameHUD(`Round: ${round+1}/${TOTAL_ROUNDS}`, `Score: ${score}`, `⏱ ${timeLeft}s`);
       }
     } else {
       failed++;
-      HUDController.showToast('Wrong gate! Try again.');
+      HUDController.showToast(`✗ Wrong! (${3 - failed} tries left)`);
       if (failed >= 3) loseGame('3 wrong answers!');
-      selectedGate = null;
     }
   }
 
   function winGame() {
     stop();
+    AudioManager.playSFX('correct');
+    AudioManager.onMiniGameEnd();
     GameManager.completeMiniGame('professor');
     GameManager.addCoins(score);
-    HUDController.showMiniGameResult(true, 'SUCCESS!',
-      `Score: ${score}\nProfessor Chen is impressed!\n+1 Heart Fragment 💗`,
-      () => {
-        DialogueSystem.start('professor_post_win', checkAllDone);
-      }
+    HUDController.showMiniGameResult(true, 'MISSION COMPLETE!',
+      `Score: ${score}\nProfessor Chen is impressed!`,
+      () => HUDController.showHeartFragment('Professor Chen', () => {
+        DialogueSystem.start('professor_post_win', () => {
+          CutsceneManager.show('professor_win', checkAllDone);
+        });
+      })
     );
   }
 
   function loseGame(reason) {
     stop();
+    AudioManager.playSFX('wrong');
+    AudioManager.onMiniGameEnd();
+    GameManager.loseHP();
     HUDController.showMiniGameResult(false, 'FAILED',
-      `${reason}\nScore: ${score}\nProfessor Chen shakes his head.`,
-      () => DialogueSystem.start('professor_post_lose', null)
+      `${reason}\nProfessor Chen shakes his head...`,
+      () => DialogueSystem.start('professor_post_lose', () => {
+        CutsceneManager.show('professor_lose', null);
+      })
     );
   }
 
   function checkAllDone() {
     const s = GameManager.getState();
-    if (s.professorDone && s.niupaiDone && s.fatherDone) EndingManager.resolve();
+    if (s.professorDone && s.niupaiDone && s.fatherDone && s.girlDone) EndingManager.resolve();
   }
 
-  // ── Render ────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────
   function render() {
     if (!gameActive) return;
     const canvas = document.getElementById('minigame-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    ctx.clearRect(0, 0, 700, 400);
+    const W = 700, H = 400;
+    ctx.clearRect(0, 0, W, H);
+
+    // Dark circuit-board BG
+    ctx.fillStyle = '#060d1a';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#0a2a0a44';
+    ctx.lineWidth = 1;
+    for (let y = 0; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    for (let x = 0; x < W; x += 24) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
 
     if (!puzzle) { animFrame = requestAnimationFrame(render); return; }
 
-    // Background
-    ctx.fillStyle = '#0a0a18';
-    ctx.fillRect(0, 0, 700, 400);
+    const isNOT = puzzle.gateType === 'NOT';
 
-    // Circuit board lines
-    ctx.strokeStyle = '#1a3a1a';
-    ctx.lineWidth = 1;
-    for (let y = 0; y < 400; y += 20) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(700, y); ctx.stroke();
+    // ── Inputs ──
+    const inAY = isNOT ? 170 : 150;
+    const inBY = 200;
+    const gateX = 260, gateY = 130, gateW = 130, gateH = 90;
+    const outX  = gateX + gateW;
+    const outY  = gateY + gateH / 2;
+
+    ctx.font = 'bold 15px Courier New';
+    ctx.textAlign = 'right';
+
+    // Input A
+    ctx.fillStyle = '#44ff88';
+    ctx.fillText(`A = ${puzzle.a}`, 110, inAY + 5);
+    drawWire(ctx, 110, inAY, gateX, gateY + gateH * 0.35, '#44ff88');
+
+    // Input B
+    if (!isNOT) {
+      ctx.fillStyle = '#44ccff';
+      ctx.fillText(`B = ${puzzle.b}`, 110, inBY + 5);
+      drawWire(ctx, 110, inBY, gateX, gateY + gateH * 0.65, '#44ccff');
     }
 
-    // Title area
-    ctx.fillStyle = '#4488ff';
-    ctx.font = 'bold 18px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('LOGIC GATE PUZZLE', 350, 40);
-
-    // Input values
-    ctx.fillStyle = '#88ff88';
-    ctx.font = '16px Courier New';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Input A = ${puzzle.a}`, 60, 130);
-    if (puzzle.gateType !== 'NOT') {
-      ctx.fillText(`Input B = ${puzzle.b}`, 60, 165);
-    }
-
-    // Wire lines
-    ctx.strokeStyle = '#44ff44';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(160, 130); ctx.lineTo(260, 180); ctx.stroke();
-    if (puzzle.gateType !== 'NOT') {
-      ctx.beginPath(); ctx.moveTo(160, 165); ctx.lineTo(260, 195); ctx.stroke();
-    }
-
-    // Gate box (unknown)
-    ctx.fillStyle = '#1a2a3a';
+    // Gate box with glow
+    ctx.shadowColor = '#4488ff';
+    ctx.shadowBlur  = 12;
+    ctx.fillStyle   = '#0d1a2e';
+    ctx.fillRect(gateX, gateY, gateW, gateH);
     ctx.strokeStyle = '#4488ff';
-    ctx.lineWidth = 3;
-    ctx.fillRect(260, 150, 120, 80);
-    ctx.strokeRect(260, 150, 120, 80);
+    ctx.lineWidth   = 3;
+    ctx.strokeRect(gateX, gateY, gateW, gateH);
+    ctx.shadowBlur  = 0;
+
+    // "?" label in gate
     ctx.fillStyle = '#ff69b4';
-    ctx.font = 'bold 22px Courier New';
+    ctx.font = 'bold 36px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillText('?', 320, 200);
+    ctx.fillText('?', gateX + gateW / 2, gateY + gateH / 2 + 13);
 
-    // Output wire
-    ctx.strokeStyle = '#44ff44';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(380, 190); ctx.lineTo(480, 190); ctx.stroke();
-
-    // Expected output
+    // Output wire + target
+    drawWire(ctx, outX, outY, outX + 80, outY, '#ffdd44');
     ctx.fillStyle = '#ffdd44';
-    ctx.font = 'bold 16px Courier New';
+    ctx.font = 'bold 15px Courier New';
     ctx.textAlign = 'left';
-    ctx.fillText(`Target Output = ${puzzle.expected}`, 490, 195);
+    ctx.fillText(`Output = ${puzzle.expected}`, outX + 88, outY + 5);
 
     // Instruction
-    ctx.fillStyle = '#aaa';
+    ctx.fillStyle = '#888';
     ctx.font = '13px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillText('Click the correct gate below:', 350, 270);
+    ctx.fillText('▼  Select the correct gate  ▼', W / 2, 258);
 
-    // Gate buttons
-    const btnW = 100, btnH = 44, gap = 30;
-    const totalW = GATES.length * btnW + (GATES.length - 1) * gap;
-    const startX = (700 - totalW) / 2;
+    // ── Option buttons (4 choices) ──
+    const btnW = 120, btnH = 48, gap = 20;
+    const total = puzzle.options.length * btnW + (puzzle.options.length - 1) * gap;
+    const startX = (W - total) / 2;
 
-    puzzle.options.forEach((gate, i) => {
+    puzzle.options.forEach((opt, i) => {
       const bx = startX + i * (btnW + gap);
-      const by = 290;
-      ctx.fillStyle = selectedGate === gate ? '#ff69b4' : '#1a2a3a';
-      ctx.strokeStyle = '#4488ff';
-      ctx.lineWidth = 2;
-      ctx.fillRect(bx, by, btnW, btnH);
-      ctx.strokeRect(bx, by, btnW, btnH);
-      ctx.fillStyle = selectedGate === gate ? '#fff' : '#88bbff';
-      ctx.font = 'bold 16px Courier New';
-      ctx.textAlign = 'center';
-      ctx.fillText(gate, bx + btnW/2, by + 28);
+      const by = 270;
+      opt.rect = { x: bx, y: by, w: btnW, h: btnH };
 
-      // Store hit areas for click detection
-      puzzle.options[i]._rect = { x: bx, y: by, w: btnW, h: btnH };
+      // Hover glow is expensive to detect, use simple fill
+      ctx.shadowColor = '#4488ff';
+      ctx.shadowBlur  = 6;
+      ctx.fillStyle   = '#0d1a2e';
+      ctx.fillRect(bx, by, btnW, btnH);
+      ctx.strokeStyle = '#4488ff';
+      ctx.lineWidth   = 2;
+      ctx.strokeRect(bx, by, btnW, btnH);
+      ctx.shadowBlur  = 0;
+
+      ctx.fillStyle = '#88bbff';
+      ctx.font = 'bold 18px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText(opt.label, bx + btnW / 2, by + 30);
     });
+
+    // Round indicator dots
+    for (let i = 0; i < TOTAL_ROUNDS; i++) {
+      ctx.beginPath();
+      ctx.arc(W / 2 - (TOTAL_ROUNDS - 1) * 14 / 2 + i * 14, 368, 5, 0, Math.PI * 2);
+      ctx.fillStyle = i < round ? '#ff69b4' : '#333';
+      ctx.fill();
+      ctx.strokeStyle = '#ff69b4';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
 
     animFrame = requestAnimationFrame(render);
   }
 
-  // ── Click handler ─────────────────────────────────────────
-  function handleClick(e) {
-    if (!gameActive || !puzzle) return;
-    const canvas = document.getElementById('minigame-canvas');
-    const rect = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (700 / rect.width);
-    const my = (e.clientY - rect.top)  * (400 / rect.height);
-
-    puzzle.options.forEach(gate => {
-      const r = gate._rect;
-      if (r && mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-        pickGate(gate);
-      }
-    });
+  function drawWire(ctx, x1, y1, x2, y2, color) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    const mx = (x1 + x2) / 2;
+    ctx.bezierCurveTo(mx, y1, mx, y2, x2, y2);
+    ctx.stroke();
+    // Dot at end
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x2, y2, 3, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  // Attach/detach click on canvas when this game is active
-  function attachListeners() {
-    const c = document.getElementById('minigame-canvas');
-    c.addEventListener('click', handleClick);
-  }
-  function detachListeners() {
-    const c = document.getElementById('minigame-canvas');
-    c.removeEventListener('click', handleClick);
-  }
-
-  const _origStart = start;
-  const wrappedStart = () => { _origStart(); attachListeners(); };
-  const _origStop  = stop;
-  const wrappedStop  = () => { _origStop();  detachListeners(); };
-
-  return { start: wrappedStart, stop: wrappedStop };
+  return { start, stop };
 })();
 
 window.MiniGame_Professor = MiniGame_Professor;

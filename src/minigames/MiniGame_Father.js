@@ -110,19 +110,30 @@ const MiniGame_Father = (() => {
 
   function winGame() {
     stop();
+    AudioManager.playSFX('correct');
+    AudioManager.onMiniGameEnd();
     GameManager.completeMiniGame('father');
     GameManager.addCoins(score * 2);
-    HUDController.showMiniGameResult(true, 'APPROVED!',
+    HUDController.showMiniGameResult(true, 'MISSION COMPLETE!',
       `Score: ${score}\nMr. Wang nods. "You have my blessing."`,
-      () => DialogueSystem.start('father_post_win', checkAllDone)
+      () => HUDController.showHeartFragment('Mr. Wang', () => {
+        DialogueSystem.start('father_post_win', () => {
+          CutsceneManager.show('father_win', checkAllDone);
+        });
+      })
     );
   }
 
   function loseGame(reason) {
     stop();
+    AudioManager.playSFX('wrong');
+    AudioManager.onMiniGameEnd();
+    GameManager.loseHP();
     HUDController.showMiniGameResult(false, 'REJECTED!',
       `${reason}\nMr. Wang is unimpressed.`,
-      () => DialogueSystem.start('father_post_lose', null)
+      () => DialogueSystem.start('father_post_lose', () => {
+        CutsceneManager.show('father_lose', null);
+      })
     );
   }
 

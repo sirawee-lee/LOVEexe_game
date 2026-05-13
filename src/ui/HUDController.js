@@ -1,8 +1,5 @@
 'use strict';
 
-/**
- * HUDController — updates hearts, coins, affinity display and toast notifications.
- */
 const HUDController = (() => {
 
   let toastTimer = null;
@@ -10,28 +7,35 @@ const HUDController = (() => {
   function update() {
     const s = GameManager.getState();
 
-    // Hearts (0-3)
+    // ── HP bar (4 slots) ──
+    const hpEl = document.getElementById('hud-hp');
+    if (hpEl) {
+      hpEl.innerHTML = '';
+      for (let i = 0; i < 4; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'hp-slot' + (i < s.hp ? ' hp-full' : ' hp-empty');
+        hpEl.appendChild(slot);
+      }
+    }
+
+    // ── Heart fragments (0-4) ──
     const heartsEl = document.getElementById('hud-hearts');
     if (heartsEl) {
       heartsEl.innerHTML = '';
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < 4; i++) {
         const span = document.createElement('span');
         span.className = 'hud-heart';
+        // Partial fill like Zelda: full / empty
         span.textContent = i < s.hearts ? '💗' : '🤍';
         heartsEl.appendChild(span);
       }
     }
 
-    // Coins
     const coinsEl = document.getElementById('hud-coins');
     if (coinsEl) coinsEl.textContent = s.coins;
 
-    // Affinity
     const affEl = document.getElementById('hud-affinity');
-    if (affEl) affEl.textContent = `Affinity: ${s.affinity}`;
-
-    // Mini-game HUD elements (if visible)
-    updateMiniGameHUD();
+    if (affEl) affEl.textContent = `♥ ${s.affinity}`;
   }
 
   function updateMiniGameHUD(left, center, right) {
@@ -43,14 +47,13 @@ const HUDController = (() => {
     if (r && right  !== undefined) r.textContent = right;
   }
 
-  function showToast(msg, duration = 2000) {
+  function showToast(msg, duration = 2200) {
     const toast = document.getElementById('toast');
     if (!toast) return;
     toast.textContent = msg;
     toast.classList.remove('active');
-    void toast.offsetWidth; // reflow to restart animation
+    void toast.offsetWidth;
     toast.classList.add('active');
-
     if (toastTimer) clearTimeout(toastTimer);
     toastTimer = setTimeout(() => toast.classList.remove('active'), duration);
   }
@@ -62,15 +65,37 @@ const HUDController = (() => {
     if (s) s.textContent = subtitle || '';
   }
 
+  // ── Heart Fragment Popup (Zelda-style) ───────────────────
+  function showHeartFragment(source, onDone) {
+    const overlay = document.getElementById('heart-fragment-overlay');
+    const label   = document.getElementById('heart-fragment-label');
+    if (!overlay) { if (onDone) onDone(); return; }
+
+    label.textContent = source ? `From: ${source}` : '';
+    overlay.classList.add('active');
+
+    // Animate the heart fill
+    const fill = document.getElementById('heart-fill-bar');
+    if (fill) {
+      fill.style.width = '0%';
+      setTimeout(() => { fill.style.width = '100%'; }, 100);
+    }
+
+    setTimeout(() => {
+      overlay.classList.remove('active');
+      if (onDone) onDone();
+    }, 2800);
+  }
+
   function showMiniGameResult(win, titleText, bodyText, onContinue) {
     const result = document.getElementById('minigame-result');
     const rTitle = document.getElementById('result-title');
     const rBody  = document.getElementById('result-body');
     const rBtn   = document.getElementById('result-btn');
 
-    rTitle.textContent = win ? '✨ SUCCESS!' : '💔 FAILED';
+    rTitle.textContent = win ? '✨ MISSION COMPLETE!' : '💔 FAILED';
     rTitle.style.color = win ? '#ff69b4' : '#cc4444';
-    rBody.textContent  = bodyText || '';
+    rBody.innerHTML    = bodyText ? bodyText.replace(/\n/g, '<br>') : '';
     result.classList.add('active');
 
     rBtn.onclick = () => {
@@ -80,7 +105,7 @@ const HUDController = (() => {
     };
   }
 
-  return { update, updateMiniGameHUD, showToast, setMiniGameTitle, showMiniGameResult };
+  return { update, updateMiniGameHUD, showToast, setMiniGameTitle, showMiniGameResult, showHeartFragment };
 })();
 
 window.HUDController = HUDController;

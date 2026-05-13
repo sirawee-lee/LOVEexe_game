@@ -184,21 +184,28 @@ const MiniGame_NiuPai = (() => {
   // ── Win / Lose ────────────────────────────────────────────
   function winGame() {
     stop();
+    AudioManager.playSFX('correct');
+    AudioManager.onMiniGameEnd();
     const bonus = decoys.length ? decoys.length * 10 : 0;
     score = 50 + timeLeft * 5 + bonus;
     GameManager.completeMiniGame('niupai');
     GameManager.addCoins(score);
-    HUDController.showMiniGameResult(true, 'ESCAPED!',
+    HUDController.showMiniGameResult(true, 'MISSION COMPLETE!',
       `Score: ${score}\nYou slipped past Niu Pai! 🎉`,
-      () => DialogueSystem.start('niupai_post_win', checkAllDone)
+      () => DialogueSystem.start('niupai_post_win', () => {
+        CutsceneManager.show('niupai_win', checkAllDone);
+      })
     );
   }
 
   function loseGame(reason) {
     stop();
+    AudioManager.playSFX('wrong');
+    AudioManager.onMiniGameEnd();
+    GameManager.loseHP();
     HUDController.showMiniGameResult(false, 'CAUGHT!',
       `${reason}\nNiu Pai wins this round. 🐕`,
-      null
+      () => CutsceneManager.show('niupai_lose', null)
     );
   }
 

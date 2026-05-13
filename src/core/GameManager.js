@@ -1,112 +1,128 @@
 'use strict';
 
-/**
- * GameManager — single source of truth for all game state.
- * Access via window.GameManager (singleton).
- */
 const GameManager = (() => {
 
-  // ── State ──────────────────────────────────────────────────
   let state = {};
 
   function reset() {
     state = {
-      hearts: 0,           // 0-3 heart fragments
+      hp: 4,               // 4-slot HP bar
+      hearts: 0,           // heart fragments 0-4
       coins: 0,
-      affinity: 0,         // 0-100 affinity with Mei
+      affinity: 0,         // 0-100
 
-      // mini-game completion flags
       professorDone: false,
       niupaiDone: false,
       fatherDone: false,
+      girlMet: false,      // met girl NPC on map
+      girlDone: false,     // completed final mini-game
 
-      // easter egg trackers
-      fedNiupaiCount: 0,   // times player fed Niu Pai
-      neverRomantic: true, // true if player never picked a romantic dialogue
+      // dog companion
+      dogUnlocked: false,  // follows player after first girl meeting
+      fedDogCount: 0,      // times fed Niu Pai on map
+      dogAsked: 0,         // times dog asked for food (throttle)
+
+      // easter egg: secret bush
+      foundEasterEgg: false,
+
+      neverRomantic: true,
     };
   }
 
-  // ── Hearts ─────────────────────────────────────────────────
   function addHeart() {
-    if (state.hearts < 3) state.hearts++;
+    if (state.hearts < 4) state.hearts++;
     HUDController.update();
   }
 
-  function getHearts() { return state.hearts; }
-
-  // ── Coins ──────────────────────────────────────────────────
-  function addCoins(n) {
-    state.coins += n;
+  function loseHP() {
+    if (state.hp > 0) state.hp--;
     HUDController.update();
+    if (state.hp <= 0) {
+      HUDController.showToast('💀 No HP left! Heading to ending...');
+      setTimeout(() => EndingManager.resolve(), 1500);
+    }
   }
 
-  function getCoins() { return state.coins; }
+  function getHearts()  { return state.hearts; }
+  function getHP()      { return state.hp; }
 
-  // ── Affinity ───────────────────────────────────────────────
+  function addCoins(n) { state.coins += n; HUDController.update(); }
+  function getCoins()  { return state.coins; }
+
   function changeAffinity(delta) {
     state.affinity = Math.max(0, Math.min(100, state.affinity + delta));
     if (delta > 0) state.neverRomantic = false;
     HUDController.update();
   }
 
-  function getAffinity() { return state.affinity; }
-
-  // ── Mini-game completion ────────────────────────────────────
   function completeMiniGame(name) {
-    if (name === 'professor') {
-      if (!state.professorDone) { state.professorDone = true; addHeart(); }
+    if (name === 'professor' && !state.professorDone) {
+      state.professorDone = true; addHeart();
     } else if (name === 'niupai') {
       state.niupaiDone = true;
-    } else if (name === 'father') {
-      if (!state.fatherDone) { state.fatherDone = true; addHeart(); }
+    } else if (name === 'father' && !state.fatherDone) {
+      state.fatherDone = true; addHeart();
+    } else if (name === 'girl' && !state.girlDone) {
+      state.girlDone = true; addHeart();
     }
   }
 
-  function feedNiupai() {
-    state.fedNiupaiCount++;
-    if (state.fedNiupaiCount >= 3) {
-      HUDController.showToast('Niu Pai loves you! 🐕');
+  function meetGirl() {
+    if (!state.girlMet) {
+      state.girlMet = true;
+      state.dogUnlocked = true;
+    }
+  }
+
+  function feedDog() {
+    state.fedDogCount++;
+    HUDController.showToast(`🌭 Niu Pai: "Woof! Thank you!" (${state.fedDogCount}/3)`);
+    if (state.fedDogCount >= 3) {
+      setTimeout(() => EndingManager.show('ending_niupai'), 1200);
+    }
+  }
+
+  function findEasterEgg() {
+    if (!state.foundEasterEgg) {
+      state.foundEasterEgg = true;
+      HUDController.showToast('🌟 You found something hidden...!', 3000);
+      setTimeout(() => EndingManager.show('ending_secret'), 2000);
     }
   }
 
   function getState() { return { ...state }; }
 
-  // ── Screen switching (thin wrapper) ─────────────────────────
   function showScreen(id) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
-    document.getElementById('screen-' + id).classList.add('active');
+    const el = document.getElementById('screen-' + id);
+    if (el) el.classList.add('active');
+    if (typeof AudioManager !== 'undefined') AudioManager.onScreenChange(id);
   }
 
-  // ── New game entry point ────────────────────────────────────
   function startNewGame() {
     reset();
     HUDController.update();
-    DialogueSystem.start('intro_girl', () => {
-      showScreen('game');
-      PlayerController.init();
-    });
     showScreen('game');
     PlayerController.init();
+    // Intro dialogue after brief delay
+    setTimeout(() => {
+      DialogueSystem.start('intro_girl', null);
+    }, 300);
   }
 
-  function backToTitle() {
-    showScreen('title');
-  }
-
-  function showCredits() {
-    HUDController.showToast('LOVE.EXE — Group 23 | SS2026 NTHU');
-  }
+  function backToTitle() { showScreen('title'); }
+  function showCredits() { HUDController.showToast('LOVE.EXE — Group 23 | SS2026 NTHU ♥'); }
 
   return {
     reset, startNewGame, backToTitle, showCredits, showScreen,
-    addHeart, getHearts,
+    addHeart, loseHP, getHearts, getHP,
     addCoins, getCoins,
-    changeAffinity, getAffinity,
-    completeMiniGame, feedNiupai,
+    changeAffinity, getAffinity: () => state.affinity,
+    completeMiniGame,
+    meetGirl, feedDog, findEasterEgg,
     getState,
   };
 })();
 
-// make accessible as both GameManager and Game (used in HTML onclick)
 window.GameManager = GameManager;
 window.Game = GameManager;

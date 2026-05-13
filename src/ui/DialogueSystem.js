@@ -11,6 +11,7 @@ const DialogueSystem = (() => {
   let lineIndex = 0;
   let onDoneCallback = null;
   let active = false;
+  let _currentDialogueId = '';
 
   // Load JSON once
   async function loadData() {
@@ -38,6 +39,7 @@ const DialogueSystem = (() => {
   }
 
   function _startDialogue(dialogueId) {
+    _currentDialogueId = dialogueId;
     const entry = dialogueData[dialogueId];
     if (!entry) {
       console.warn('Dialogue not found:', dialogueId);
@@ -86,6 +88,7 @@ const DialogueSystem = (() => {
       GameManager.changeAffinity(choice.affinityDelta);
     }
     if (choice.jumpTo) {
+      _currentDialogueId = choice.jumpTo;
       start(choice.jumpTo, onDoneCallback);
     } else {
       lineIndex++;
@@ -107,6 +110,12 @@ const DialogueSystem = (() => {
     const box = document.getElementById('dialogue-box');
     box.classList.remove('active');
     document.getElementById('dialogue-choices').innerHTML = '';
+
+    // After intro_girl finishes, unlock dog + girl NPC on map
+    if (_currentDialogueId === 'intro_girl_bold' || _currentDialogueId === 'intro_girl_shy') {
+      PlayerController.onGirlMet();
+    }
+
     if (onDoneCallback) {
       const cb = onDoneCallback;
       onDoneCallback = null;
