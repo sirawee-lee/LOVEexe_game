@@ -1,52 +1,73 @@
 'use strict';
 
 /**
- * MiniGame_FinalBoss — "Heartbeat Tap"
- * Rhythm game: hit SPACE or click when the pulse ring hits the center.
- * 10 beats, need 7+ perfect/good hits to win.
- * This is the final challenge with Mei before the true ending.
+ * MiniGame_FinalBoss — "osu! Heart Beat"
+ * OSU-style: circles appear at random positions with shrinking approach rings.
+ * Click (or press SPACE for random) when the ring matches the circle edge.
+ * 10 notes, need 7+ hits to win.
  */
 const MiniGame_FinalBoss = (() => {
 
-  const TOTAL_BEATS = 10;
-  const PERFECT_WINDOW = 18;  // px tolerance for perfect
-  const GOOD_WINDOW    = 36;
-
   const W = 700, H = 400;
-  const CX = W / 2, CY = H / 2 - 20;
-  const INNER_R  = 30;
-  const SPAWN_R  = 180;
-  const BEAT_INTERVAL = 1400; // ms between beats
+  const TOTAL_NOTES   = 10;
+  const NOTE_INTERVAL = 1600; // ms between notes
+  const NOTE_RADIUS   = 28;
+  const APPROACH_R_START = 80;
+  const PERFECT_WINDOW   = 12;  // px tolerance
+  const GOOD_WINDOW      = 26;
 
-  let beats, hits, misses, score, gameActive;
-  let animFrame, beatTimer;
-  let currentBeat = null; // { r, born, judged }
-  let lastJudge = null;   // { text, color, timer }
+  let notes, hits, misses, score, gameActive;
+  let animFrame, noteTimer;
+  let noteIndex = 0;
+  let activeNote = null;   // { x, y, born, approachR, judged, id }
+  let lastJudge  = null;   // { text, color, timer, x, y }
   let clickHandler = null;
   let keyHandler   = null;
+  let time = 0;
+
+  // Pre-generated note positions (OSU-like placement)
+  function genNotePositions() {
+    const positions = [];
+    const margin = 80;
+    for (let i = 0; i < TOTAL_NOTES; i++) {
+      positions.push({
+        x: margin + Math.random() * (W - margin * 2),
+        y: margin + Math.random() * (H - margin * 2),
+      });
+    }
+    return positions;
+  }
+
+  let notePositions = [];
 
   function start() {
-    beats = 0; hits = 0; misses = 0; score = 0;
+    notes = []; hits = 0; misses = 0; score = 0;
     gameActive = true;
-    currentBeat = null;
-    lastJudge   = null;
+    noteIndex = 0;
+    activeNote = null;
+    lastJudge  = null;
+    time = 0;
+    notePositions = genNotePositions();
 
-    HUDController.setMiniGameTitle('HEARTBEAT TAP', 'Press SPACE or CLICK when the ring reaches the center!');
-    HUDController.updateMiniGameHUD(`Hits: 0/${TOTAL_BEATS}`, `Score: ${score}`, '♥ ♥ ♥');
+    HUDController.setMiniGameTitle(
+      'OSU! HEART BEAT ♥',
+      'Click the circles when the ring hits the edge! [Click] or [SPACE]'
+    );
+    HUDController.updateMiniGameHUD(`Hits: 0/${TOTAL_NOTES}`, `Score: ${score}`, '♥ ♥ ♥');
 
-    animFrame = requestAnimationFrame(render);
-    scheduleBeat();
+    animFrame = requestAnimationFrame(renderLoop);
+    scheduleNote();
 
     const canvas = document.getElementById('minigame-canvas');
-    clickHandler = () => tap();
-    keyHandler   = e => { if (e.code === 'Space') { e.preventDefault(); tap(); } };
-    canvas.addEventListener('click', clickHandler);
+    clickHandler = e => handleClick(e);
+    keyHandler   = e => { if (e.code === 'Space') { e.preventDefault(); tapKey(); } };
+    if (canvas) canvas.addEventListener('click', clickHandler);
     document.addEventListener('keydown', keyHandler);
   }
 
   function stop() {
     gameActive = false;
-    clearTimeout(beatTimer);
+    clearTimeout(noteTimer);
     cancelAnimationFrame(animFrame);
     const canvas = document.getElementById('minigame-canvas');
     if (canvas && clickHandler) canvas.removeEventListener('click', clickHandler);
@@ -54,39 +75,70 @@ const MiniGame_FinalBoss = (() => {
     clickHandler = null; keyHandler = null;
   }
 
-  function scheduleBeat() {
+  function scheduleNote() {
     if (!gameActive) return;
-    if (beats >= TOTAL_BEATS) { checkEnd(); return; }
-    currentBeat = { r: SPAWN_R, born: performance.now(), judged: false };
-    beats++;
-    HUDController.updateMiniGameHUD(`Hits: ${hits}/${TOTAL_BEATS}`, `Score: ${score}`, '♥'.repeat(Math.max(0, hits)));
-    beatTimer = setTimeout(scheduleBeat, BEAT_INTERVAL);
+    if (noteIndex >= TOTAL_NOTES) {
+      // Wait for last note to finish then check end
+      noteTimer = setTimeout(checkEnd, NOTE_INTERVAL + 800);
+      return;
+    }
+    const pos = notePositions[noteIndex];
+    activeNote = {
+      x: pos.x,
+      y: pos.y,
+      born: performance.now(),
+      approachR: APPROACH_R_START,
+      judged: false,
+      id: noteIndex,
+    };
+    noteIndex++;
+    HUDController.updateMiniGameHUD(`Hits: ${hits}/${TOTAL_NOTES}`, `Score: ${score}`, '♥'.repeat(Math.max(0,hits)));
+    noteTimer = setTimeout(scheduleNote, NOTE_INTERVAL);
   }
 
-  function tap() {
-    if (!gameActive || !currentBeat || currentBeat.judged) return;
-    currentBeat.judged = true;
-    const diff = Math.abs(currentBeat.r - INNER_R);
+  function handleClick(e) {
+    if (!gameActive || !activeNote || activeNote.judged) return;
+    const canvas = document.getElementById('minigame-canvas');
+    const rect = canvas.getBoundingClientRect();
+    const mx = (e.clientX - rect.left) * (W / rect.width);
+    const my = (e.clientY - rect.top)  * (H / rect.height);
+
+    // Check if clicked near the note circle
+    const dist = Math.hypot(mx - activeNote.x, my - activeNote.y);
+    if (dist <= NOTE_RADIUS + GOOD_WINDOW + 10) {
+      // Clicked in the right area — now check timing
+      judgeNote(activeNote.x, activeNote.y);
+    }
+    // Missed click far from note = no penalty (just feedback)
+  }
+
+  function tapKey() {
+    if (!gameActive || !activeNote || activeNote.judged) return;
+    judgeNote(activeNote.x, activeNote.y);
+  }
+
+  function judgeNote(nx, ny) {
+    if (!activeNote || activeNote.judged) return;
+    activeNote.judged = true;
+
+    const diff = Math.abs(activeNote.approachR - NOTE_RADIUS);
     if (diff <= PERFECT_WINDOW) {
-      hits++; score += 30;
-      lastJudge = { text: '✨ PERFECT!', color: '#ff69b4', timer: 40 };
+      hits++; score += 300;
+      lastJudge = { text: '✨ PERFECT!', color: '#ff69b4', timer: 50, x: nx, y: ny - 40 };
     } else if (diff <= GOOD_WINDOW) {
-      hits++; score += 15;
-      lastJudge = { text: '♥ GOOD', color: '#ffdd44', timer: 40 };
+      hits++; score += 150;
+      lastJudge = { text: '♥ GOOD', color: '#ffdd44', timer: 50, x: nx, y: ny - 40 };
     } else {
       misses++;
-      lastJudge = { text: 'MISS...', color: '#cc4444', timer: 40 };
+      lastJudge = { text: 'MISS...', color: '#cc4444', timer: 50, x: nx, y: ny - 40 };
     }
-    HUDController.updateMiniGameHUD(`Hits: ${hits}/${TOTAL_BEATS}`, `Score: ${score}`, '♥'.repeat(hits));
+    HUDController.updateMiniGameHUD(`Hits: ${hits}/${TOTAL_NOTES}`, `Score: ${score}`, '♥'.repeat(hits));
   }
 
   function checkEnd() {
-    if (beats < TOTAL_BEATS) return; // still going
-    // Wait for last beat to settle
-    setTimeout(() => {
-      if (hits >= 7) winGame();
-      else loseGame();
-    }, BEAT_INTERVAL);
+    if (!gameActive) return;
+    if (hits >= 7) winGame();
+    else loseGame();
   }
 
   function winGame() {
@@ -95,9 +147,9 @@ const MiniGame_FinalBoss = (() => {
     AudioManager.onMiniGameEnd();
     GameManager.completeMiniGame('girl');
     GameManager.addCoins(score);
-    GameManager.changeAffinity(30);
+    GameManager.changeAffinity(60);
     HUDController.showMiniGameResult(true, 'IN SYNC! 💗',
-      `Score: ${score}\nYour heartbeats matched perfectly...`,
+      `Score: ${score}\nYou hit ${hits}/${TOTAL_NOTES} beats.\nYour heartbeats are perfectly matched...`,
       () => HUDController.showHeartFragment('Mei 💕', () => {
         CutsceneManager.show('girl_win', () => EndingManager.resolve());
       })
@@ -110,116 +162,156 @@ const MiniGame_FinalBoss = (() => {
     AudioManager.onMiniGameEnd();
     GameManager.loseHP();
     HUDController.showMiniGameResult(false, 'NOT IN SYNC...',
-      `You got ${hits}/${TOTAL_BEATS} beats.\nMei smiles softly. "Maybe next time?"`,
+      `You got ${hits}/${TOTAL_NOTES} hits.\nMei smiles softly. "Maybe next time?"`,
       () => null
     );
   }
 
   // ── Render ─────────────────────────────────────────────────
-  let time = 0;
-  function render() {
+  function renderLoop() {
     if (!gameActive) return;
     time++;
+
     const canvas = document.getElementById('minigame-canvas');
-    if (!canvas) return;
+    if (!canvas) { animFrame = requestAnimationFrame(renderLoop); return; }
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, W, H);
 
-    // BG — dark with subtle heartbeat gradient
-    const grd = ctx.createRadialGradient(CX, CY, 10, CX, CY, 300);
+    // BG — soft dark with particles
+    const grd = ctx.createRadialGradient(W/2, H/2, 10, W/2, H/2, 350);
     grd.addColorStop(0, '#1a0a1a');
     grd.addColorStop(1, '#060610');
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, W, H);
 
-    // Decorative particle hearts
-    for (let i = 0; i < 8; i++) {
-      const angle = (i / 8) * Math.PI * 2 + time * 0.005;
-      const dist  = 200 + Math.sin(time * 0.03 + i) * 20;
-      const hx = CX + Math.cos(angle) * dist;
-      const hy = CY + Math.sin(angle) * dist;
-      ctx.fillStyle = `rgba(255,105,180,${0.08 + 0.05 * Math.sin(time * 0.05 + i)})`;
-      ctx.font = '18px serif';
+    // Floating hearts particles
+    for (let i = 0; i < 12; i++) {
+      const angle = (i / 12) * Math.PI * 2 + time * 0.004;
+      const dist  = 230 + Math.sin(time * 0.02 + i) * 25;
+      const hx = W/2 + Math.cos(angle) * dist;
+      const hy = H/2 + Math.sin(angle) * dist;
+      ctx.fillStyle = `rgba(255,105,180,${0.06 + 0.04 * Math.sin(time * 0.04 + i)})`;
+      ctx.font = '16px serif';
       ctx.textAlign = 'center';
       ctx.fillText('♥', hx, hy);
     }
 
-    // ── Target ring (inner) ──
-    ctx.strokeStyle = '#ff69b4';
-    ctx.lineWidth = 4;
-    ctx.shadowColor = '#ff69b4';
-    ctx.shadowBlur  = 15;
-    ctx.beginPath();
-    ctx.arc(CX, CY, INNER_R, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    // Center icon
-    ctx.fillStyle = '#ff69b4aa';
-    ctx.font = '28px serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('💗', CX, CY + 10);
-
-    // ── Incoming beat ring ──
-    if (currentBeat && !currentBeat.judged) {
-      // Shrink ring toward center
-      const elapsed = performance.now() - currentBeat.born;
-      const progress = Math.min(elapsed / (BEAT_INTERVAL * 0.85), 1);
-      currentBeat.r  = SPAWN_R * (1 - progress);
-
-      const alpha = 0.4 + 0.6 * progress;
-      const pulse = Math.sin(time * 0.15) * 0.1 + 0.9;
-      ctx.strokeStyle = `rgba(255,180,220,${alpha})`;
-      ctx.lineWidth = 3 * pulse;
-      ctx.shadowColor = '#ff69b4';
-      ctx.shadowBlur  = 10;
+    // Progress dots (note history)
+    const dotSpacing = (W - 120) / TOTAL_NOTES;
+    for (let i = 0; i < TOTAL_NOTES; i++) {
+      const dx = 60 + i * dotSpacing;
+      const dy = H - 28;
       ctx.beginPath();
-      ctx.arc(CX, CY, Math.max(currentBeat.r, INNER_R), 0, Math.PI * 2);
+      ctx.arc(dx, dy, 5, 0, Math.PI*2);
+      if (i < noteIndex - 1) {
+        ctx.fillStyle = (i < hits + misses && lastJudge) ? '#ff69b4' : '#555';
+      } else if (i === noteIndex - 1) {
+        ctx.fillStyle = '#ffdd44';
+      } else {
+        ctx.fillStyle = '#333';
+      }
+      ctx.fill();
+      ctx.strokeStyle = '#ff69b444';
+      ctx.lineWidth = 1;
       ctx.stroke();
-      ctx.shadowBlur = 0;
+    }
 
-      // auto-miss if ring passed center
-      if (currentBeat.r <= INNER_R - GOOD_WINDOW && !currentBeat.judged) {
-        currentBeat.judged = true;
+    // Update approach ring
+    if (activeNote && !activeNote.judged) {
+      const elapsed = performance.now() - activeNote.born;
+      const progress = Math.min(elapsed / (NOTE_INTERVAL * 0.88), 1);
+      activeNote.approachR = APPROACH_R_START + (NOTE_RADIUS - APPROACH_R_START) * progress;
+
+      // Auto-miss
+      if (activeNote.approachR <= NOTE_RADIUS - GOOD_WINDOW - 4 && !activeNote.judged) {
+        activeNote.judged = true;
         misses++;
-        lastJudge = { text: 'MISS...', color: '#cc4444', timer: 40 };
-        HUDController.updateMiniGameHUD(`Hits: ${hits}/${TOTAL_BEATS}`, `Score: ${score}`, '♥'.repeat(hits));
+        lastJudge = { text: 'MISS...', color: '#cc4444', timer: 50, x: activeNote.x, y: activeNote.y - 40 };
+        HUDController.updateMiniGameHUD(`Hits: ${hits}/${TOTAL_NOTES}`, `Score: ${score}`, '♥'.repeat(hits));
       }
     }
 
-    // ── Judge text ──
+    // Draw active note
+    if (activeNote) {
+      const { x, y, approachR, judged } = activeNote;
+
+      if (!judged) {
+        // Approach ring (shrinking)
+        const alpha = 0.35 + 0.65 * ((APPROACH_R_START - approachR) / (APPROACH_R_START - NOTE_RADIUS));
+        ctx.strokeStyle = `rgba(255,180,220,${alpha})`;
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#ff69b4';
+        ctx.shadowBlur = 8;
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(approachR, NOTE_RADIUS), 0, Math.PI*2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Hit circle
+        ctx.fillStyle = '#ff69b422';
+        ctx.beginPath();
+        ctx.arc(x, y, NOTE_RADIUS, 0, Math.PI*2);
+        ctx.fill();
+        ctx.strokeStyle = '#ff69b4';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#ff69b4';
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(x, y, NOTE_RADIUS, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Note number
+        ctx.fillStyle = '#fff';
+        ctx.font = `bold 14px Courier New`;
+        ctx.textAlign = 'center';
+        ctx.fillText(noteIndex.toString(), x, y + 5);
+
+        // Heart icon in center
+        ctx.font = '16px serif';
+        ctx.fillText('♥', x, y + 6);
+      } else {
+        // Fading out circle
+        ctx.globalAlpha = 0.3;
+        ctx.strokeStyle = '#ff69b4';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(x, y, NOTE_RADIUS + 8, 0, Math.PI*2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+    }
+
+    // Judge text (floating at note position)
     if (lastJudge && lastJudge.timer > 0) {
       lastJudge.timer--;
+      const alpha = lastJudge.timer / 50;
+      const floatY = lastJudge.y - (50 - lastJudge.timer) * 0.5;
+      ctx.globalAlpha = alpha;
       ctx.fillStyle = lastJudge.color;
-      ctx.font = `bold ${20 + (40 - lastJudge.timer) * 0.3}px Courier New`;
+      ctx.font = `bold ${16 + (50 - lastJudge.timer) * 0.15}px Courier New`;
       ctx.textAlign = 'center';
-      ctx.globalAlpha = lastJudge.timer / 40;
-      ctx.fillText(lastJudge.text, CX, CY - 80);
+      ctx.fillText(lastJudge.text, lastJudge.x, floatY);
       ctx.globalAlpha = 1;
     }
 
-    // ── Progress bar ──
-    const pct = hits / TOTAL_BEATS;
-    ctx.fillStyle = '#1a0a1a';
-    ctx.fillRect(60, H - 40, W - 120, 16);
-    ctx.fillStyle = '#ff69b4';
-    ctx.fillRect(60, H - 40, (W - 120) * pct, 16);
-    ctx.strokeStyle = '#ff69b488';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(60, H - 40, W - 120, 16);
-
-    // Beat counter
+    // Accuracy combo
     ctx.fillStyle = '#aaa';
     ctx.font = '12px Courier New';
     ctx.textAlign = 'center';
-    ctx.fillText(`${hits} hits / ${TOTAL_BEATS} beats`, W / 2, H - 50);
+    ctx.fillText(`${hits} hits  ${misses} miss`, W/2, 20);
+
+    // Score
+    ctx.fillStyle = '#ff69b4';
+    ctx.font = 'bold 14px Courier New';
+    ctx.fillText(`${score}`, W - 50, 20);
 
     // Hint
-    ctx.fillStyle = '#ffffff44';
-    ctx.font = '13px Courier New';
-    ctx.fillText('[SPACE] or [CLICK]', W / 2, H - 10);
+    ctx.fillStyle = '#ffffff33';
+    ctx.font = '11px Courier New';
+    ctx.fillText('[CLICK on circle] or [SPACE] when ring = edge', W/2, H - 10);
 
-    animFrame = requestAnimationFrame(render);
+    animFrame = requestAnimationFrame(renderLoop);
   }
 
   return { start, stop };

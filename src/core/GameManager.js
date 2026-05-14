@@ -58,8 +58,8 @@ const GameManager = (() => {
   function completeMiniGame(name) {
     if (name === 'professor' && !state.professorDone) {
       state.professorDone = true; addHeart();
-    } else if (name === 'niupai') {
-      state.niupaiDone = true;
+    } else if (name === 'niupai' && !state.niupaiDone) {
+      state.niupaiDone = true; addHeart();
     } else if (name === 'father' && !state.fatherDone) {
       state.fatherDone = true; addHeart();
     } else if (name === 'girl' && !state.girlDone) {
@@ -79,6 +79,14 @@ const GameManager = (() => {
     HUDController.showToast(`🌭 Niu Pai: "Woof! Thank you!" (${state.fedDogCount}/3)`);
     if (state.fedDogCount >= 3) {
       setTimeout(() => EndingManager.show('ending_niupai'), 1200);
+    }
+  }
+
+  // Called from MiniGame_NiuPai when dropping sausage decoy
+  function feedNiupai() {
+    state.fedDogCount++;
+    if (state.fedDogCount >= 3) {
+      setTimeout(() => EndingManager.show('ending_niupai'), 2000);
     }
   }
 
@@ -119,7 +127,7 @@ const GameManager = (() => {
     addCoins, getCoins,
     changeAffinity, getAffinity: () => state.affinity,
     completeMiniGame,
-    meetGirl, feedDog, findEasterEgg,
+    meetGirl, feedDog, feedNiupai, findEasterEgg,
     getState,
   };
 })();

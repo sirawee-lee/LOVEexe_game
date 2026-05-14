@@ -1,113 +1,200 @@
 'use strict';
 
 /**
- * MiniGame_Professor — "Circuit Pulse"
- * Logic-gate puzzle: choose the correct gate (AND/OR/NOT/NAND/XOR) to match output.
- * Win: solve 3 circuits in 60 seconds.
- * Fix: options are objects {label, rect} so clicks work correctly.
+ * MiniGame_Professor — "Rope Swing"
+ * Delta Building rooftop: swing on a rope and land on platforms.
+ * Press SPACE to release the rope and fly to the next platform.
+ * 3 successful swings to win. Miss = fall = lose a life.
  */
 const MiniGame_Professor = (() => {
 
-  const TOTAL_ROUNDS = 3;
+  const W = 700, H = 400;
+  const TOTAL_SWINGS = 3;
   const TIME_LIMIT   = 60;
 
-  let round, score, timeLeft, failed, timerInterval, animFrame;
-  let puzzle = null;
+  let round, score, timeLeft, lives, timerInterval, animFrame;
   let gameActive = false;
+  let keyHandler = null;
   let clickHandler = null;
 
-  const ALL_GATES = ['AND', 'OR', 'NOT', 'NAND', 'XOR'];
+  // Rope swing state
+  let rope = {};
+  let player = {};
+  let platforms = [];
+  let released = false;
+  let flying = false;
+  let landed = false;
+  let failFall = false;
+  let resultTimer = 0;
 
-  function genPuzzle() {
-    const gateType = ALL_GATES[Math.floor(Math.random() * ALL_GATES.length)];
-    const a = Math.round(Math.random());
-    const b = Math.round(Math.random());
-    let expected;
-    if      (gateType === 'AND')  expected = a & b;
-    else if (gateType === 'OR')   expected = a | b;
-    else if (gateType === 'NOT')  expected = a ? 0 : 1;
-    else if (gateType === 'NAND') expected = (a & b) ? 0 : 1;
-    else                          expected = a ^ b;  // XOR
+  function initRound() {
+    released = false;
+    flying   = false;
+    landed   = false;
+    failFall = false;
+    resultTimer = 0;
 
-    // Build 4 options: correct + 3 random wrong, shuffled
-    const wrong = ALL_GATES.filter(g => g !== gateType).sort(() => Math.random() - 0.5).slice(0, 3);
-    const opts  = [gateType, ...wrong].sort(() => Math.random() - 0.5);
-
-    // options are objects so we can attach rect without mutating strings
-    return {
-      gateType, a, b, expected,
-      options: opts.map(label => ({ label, rect: null })),
+    // Anchor point at top-center
+    rope = {
+      ax: W / 2,     // anchor x
+      ay: 30,        // anchor y
+      len: 110,      // rope length
+      angle: -0.8,   // start angle (left side)
+      omega: 1.4,    // angular velocity (right-swinging)
+      gravity: 0.025,
     };
+
+    // Player hangs at rope end
+    player = {
+      x: rope.ax + Math.sin(rope.angle) * rope.len,
+      y: rope.ay + Math.cos(rope.angle) * rope.len,
+      vx: 0,
+      vy: 0,
+      w: 20,
+      h: 28,
+    };
+
+    // Landing platforms: left (start) and right (target)
+    const targetX = W * 0.6 + Math.random() * W * 0.18;
+    platforms = [
+      { x: W * 0.08, y: H - 70, w: 90, h: 18, color: '#5a3a1a', safe: false },  // left (start) — already standing
+      { x: targetX,  y: H - 70 - Math.round(Math.random() * 40), w: 80, h: 18, color: '#2a5a2a', safe: true },  // right (land here)
+    ];
   }
 
   // ── Public API ────────────────────────────────────────────
   function start() {
-    round = 0; score = 0; timeLeft = TIME_LIMIT; failed = 0;
+    round = 0; score = 0; timeLeft = TIME_LIMIT; lives = 3;
     gameActive = true;
-    puzzle = genPuzzle();
 
-    HUDController.setMiniGameTitle('CIRCUIT PULSE', 'Click the correct logic gate to match the output!');
-    HUDController.updateMiniGameHUD(`Round: 1/${TOTAL_ROUNDS}`, `Score: ${score}`, `⏱ ${timeLeft}s`);
+    HUDController.setMiniGameTitle(
+      'ROPE SWING',
+      'Press SPACE (or Click) at the right moment to release and land on the platform!'
+    );
+    HUDController.updateMiniGameHUD(
+      `Lives: ${'❤'.repeat(lives)}`,
+      `Round: ${round + 1}/${TOTAL_SWINGS}`,
+      `⏱ ${timeLeft}s`
+    );
+
+    initRound();
 
     timerInterval = setInterval(tick, 1000);
-    animFrame = requestAnimationFrame(render);
+    animFrame = requestAnimationFrame(loop);
 
+    keyHandler  = e => { if (e.code === 'Space') { e.preventDefault(); doRelease(); } };
+    clickHandler = () => doRelease();
+    document.addEventListener('keydown', keyHandler);
     const canvas = document.getElementById('minigame-canvas');
-    clickHandler = handleClick.bind(null);
-    canvas.addEventListener('click', clickHandler);
+    if (canvas) canvas.addEventListener('click', clickHandler);
   }
 
   function stop() {
     gameActive = false;
     clearInterval(timerInterval);
     cancelAnimationFrame(animFrame);
+    document.removeEventListener('keydown', keyHandler);
     const canvas = document.getElementById('minigame-canvas');
     if (canvas && clickHandler) canvas.removeEventListener('click', clickHandler);
-    clickHandler = null;
+    keyHandler = null; clickHandler = null;
   }
 
   function tick() {
     if (!gameActive) return;
     timeLeft--;
-    HUDController.updateMiniGameHUD(`Round: ${round+1}/${TOTAL_ROUNDS}`, `Score: ${score}`, `⏱ ${timeLeft}s`);
-    if (timeLeft <= 0) loseGame("Time's up!");
+    HUDController.updateMiniGameHUD(
+      `Lives: ${'❤'.repeat(Math.max(0,lives))}`,
+      `Round: ${round + 1}/${TOTAL_SWINGS}`,
+      `⏱ ${timeLeft}s`
+    );
+    if (timeLeft <= 0) loseGame("Time's up! Prof. Hung is disappointed.");
   }
 
-  function handleClick(e) {
-    if (!gameActive || !puzzle) return;
-    const canvas = document.getElementById('minigame-canvas');
-    const rect   = canvas.getBoundingClientRect();
-    const mx = (e.clientX - rect.left) * (700 / rect.width);
-    const my = (e.clientY - rect.top)  * (400 / rect.height);
+  function doRelease() {
+    if (!gameActive || released) return;
+    released = true;
+    flying   = true;
 
-    for (const opt of puzzle.options) {
-      if (!opt.rect) continue;
-      const r = opt.rect;
-      if (mx >= r.x && mx <= r.x + r.w && my >= r.y && my <= r.y + r.h) {
-        pickGate(opt.label);
+    // Give player velocity tangential to rope at moment of release
+    const vTangential = rope.omega * rope.len;
+    player.vx =  Math.cos(rope.angle) * vTangential;
+    player.vy = -Math.sin(rope.angle) * vTangential * 0.6;
+  }
+
+  function loop() {
+    if (!gameActive) return;
+    updatePhysics();
+    render();
+    animFrame = requestAnimationFrame(loop);
+  }
+
+  function updatePhysics() {
+    if (landed || failFall) {
+      resultTimer++;
+      if (resultTimer >= 60) {
+        if (landed) {
+          round++;
+          score += 20 + Math.floor(timeLeft * 0.5);
+          HUDController.updateMiniGameHUD(
+            `Lives: ${'❤'.repeat(Math.max(0,lives))}`,
+            `Round: ${round + 1}/${TOTAL_SWINGS}`,
+            `⏱ ${timeLeft}s`
+          );
+          if (round >= TOTAL_SWINGS) { winGame(); return; }
+          initRound();
+        } else {
+          lives--;
+          HUDController.updateMiniGameHUD(
+            `Lives: ${'❤'.repeat(Math.max(0,lives))}`,
+            `Round: ${round + 1}/${TOTAL_SWINGS}`,
+            `⏱ ${timeLeft}s`
+          );
+          if (lives <= 0) { loseGame('Fell too many times!'); return; }
+          initRound();
+        }
+      }
+      return;
+    }
+
+    if (!released) {
+      // Pendulum physics
+      const sin = Math.sin(rope.angle);
+      rope.omega -= (rope.gravity / rope.len) * sin * 60 * (1/60);
+      rope.omega *= 0.999; // tiny damping
+      rope.angle += rope.omega * (1/60) * 60;
+      // Clamp angle so swing stays within bounds
+      if (rope.angle > 1.1)  { rope.omega *= -0.6; rope.angle = 1.1; }
+      if (rope.angle < -1.1) { rope.omega *= -0.6; rope.angle = -1.1; }
+
+      player.x = rope.ax + Math.sin(rope.angle) * rope.len;
+      player.y = rope.ay + Math.cos(rope.angle) * rope.len;
+    } else if (flying) {
+      // Projectile physics
+      player.vy += 0.4;  // gravity
+      player.x  += player.vx;
+      player.y  += player.vy;
+
+      // Check landing on target platform
+      const target = platforms[1];
+      if (
+        player.x + player.w > target.x &&
+        player.x < target.x + target.w &&
+        player.y + player.h >= target.y &&
+        player.y + player.h <= target.y + target.h + 12 &&
+        player.vy >= 0
+      ) {
+        landed = true;
+        player.y = target.y - player.h;
+        player.vx = 0; player.vy = 0;
+        HUDController.showToast('✓ Landed! +' + (20 + Math.floor(timeLeft * 0.5)) + ' pts');
         return;
       }
-    }
-  }
 
-  function pickGate(label) {
-    if (!gameActive) return;
-    const correct = label === puzzle.gateType;
-    if (correct) {
-      const bonus = timeLeft > TIME_LIMIT - 8 ? 10 : 0;
-      score += 20 + bonus;
-      HUDController.showToast(bonus ? '⚡ FAST! +30 pts' : '✓ Correct! +20 pts');
-      round++;
-      if (round >= TOTAL_ROUNDS) {
-        winGame();
-      } else {
-        puzzle = genPuzzle();
-        HUDController.updateMiniGameHUD(`Round: ${round+1}/${TOTAL_ROUNDS}`, `Score: ${score}`, `⏱ ${timeLeft}s`);
+      // Check if missed (fell off screen or landed on wrong platform)
+      if (player.y > H + 20) {
+        failFall = true;
+        HUDController.showToast('💥 Missed the platform! -1 Life');
       }
-    } else {
-      failed++;
-      HUDController.showToast(`✗ Wrong! (${3 - failed} tries left)`);
-      if (failed >= 3) loseGame('3 wrong answers!');
     }
   }
 
@@ -118,8 +205,8 @@ const MiniGame_Professor = (() => {
     GameManager.completeMiniGame('professor');
     GameManager.addCoins(score);
     HUDController.showMiniGameResult(true, 'MISSION COMPLETE!',
-      `Score: ${score}\nProfessor Chen is impressed!`,
-      () => HUDController.showHeartFragment('Professor Chen', () => {
+      `Score: ${score}\nProf. Hung nods. "Perfect timing. You understand physics — and perhaps, also love."`,
+      () => HUDController.showHeartFragment('Prof. Hung 🏛', () => {
         DialogueSystem.start('professor_post_win', () => {
           CutsceneManager.show('professor_win', checkAllDone);
         });
@@ -133,7 +220,7 @@ const MiniGame_Professor = (() => {
     AudioManager.onMiniGameEnd();
     GameManager.loseHP();
     HUDController.showMiniGameResult(false, 'FAILED',
-      `${reason}\nProfessor Chen shakes his head...`,
+      `${reason}\nProf. Hung: "The rope of fate requires precise release."`,
       () => DialogueSystem.start('professor_post_lose', () => {
         CutsceneManager.show('professor_lose', null);
       })
@@ -142,7 +229,9 @@ const MiniGame_Professor = (() => {
 
   function checkAllDone() {
     const s = GameManager.getState();
-    if (s.professorDone && s.niupaiDone && s.fatherDone && s.girlDone) EndingManager.resolve();
+    if (s.professorDone && s.niupaiDone && s.fatherDone && !s.girlDone) {
+      setTimeout(() => HUDController.showToast('💕 All 3 fragments! Go South from Delta Building — Mei is waiting!', 5000), 500);
+    }
   }
 
   // ── Render ─────────────────────────────────────────────────
@@ -151,125 +240,151 @@ const MiniGame_Professor = (() => {
     const canvas = document.getElementById('minigame-canvas');
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
-    const W = 700, H = 400;
     ctx.clearRect(0, 0, W, H);
 
-    // Dark circuit-board BG
-    ctx.fillStyle = '#060d1a';
+    // Sky — rooftop feel
+    const sky = ctx.createLinearGradient(0, 0, 0, H);
+    sky.addColorStop(0, '#0a1a3a');
+    sky.addColorStop(1, '#1a2a4a');
+    ctx.fillStyle = sky;
     ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = '#0a2a0a44';
-    ctx.lineWidth = 1;
-    for (let y = 0; y < H; y += 24) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-    for (let x = 0; x < W; x += 24) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke(); }
 
-    if (!puzzle) { animFrame = requestAnimationFrame(render); return; }
-
-    const isNOT = puzzle.gateType === 'NOT';
-
-    // ── Inputs ──
-    const inAY = isNOT ? 170 : 150;
-    const inBY = 200;
-    const gateX = 260, gateY = 130, gateW = 130, gateH = 90;
-    const outX  = gateX + gateW;
-    const outY  = gateY + gateH / 2;
-
-    ctx.font = 'bold 15px Courier New';
-    ctx.textAlign = 'right';
-
-    // Input A
-    ctx.fillStyle = '#44ff88';
-    ctx.fillText(`A = ${puzzle.a}`, 110, inAY + 5);
-    drawWire(ctx, 110, inAY, gateX, gateY + gateH * 0.35, '#44ff88');
-
-    // Input B
-    if (!isNOT) {
-      ctx.fillStyle = '#44ccff';
-      ctx.fillText(`B = ${puzzle.b}`, 110, inBY + 5);
-      drawWire(ctx, 110, inBY, gateX, gateY + gateH * 0.65, '#44ccff');
+    // Stars
+    ctx.fillStyle = '#ffffff66';
+    for (let i = 0; i < 20; i++) {
+      const sx = (i * 137 + 40) % W, sy = (i * 53) % (H * 0.4);
+      ctx.fillRect(sx, sy, 2, 2);
     }
 
-    // Gate box with glow
-    ctx.shadowColor = '#4488ff';
-    ctx.shadowBlur  = 12;
-    ctx.fillStyle   = '#0d1a2e';
-    ctx.fillRect(gateX, gateY, gateW, gateH);
-    ctx.strokeStyle = '#4488ff';
-    ctx.lineWidth   = 3;
-    ctx.strokeRect(gateX, gateY, gateW, gateH);
-    ctx.shadowBlur  = 0;
+    // Building edge (rooftop floor)
+    ctx.fillStyle = '#334455';
+    ctx.fillRect(0, H - 30, W, 30);
+    ctx.fillStyle = '#445566';
+    ctx.fillRect(0, H - 32, W, 4);
 
-    // "?" label in gate
-    ctx.fillStyle = '#ff69b4';
-    ctx.font = 'bold 36px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('?', gateX + gateW / 2, gateY + gateH / 2 + 13);
-
-    // Output wire + target
-    drawWire(ctx, outX, outY, outX + 80, outY, '#ffdd44');
-    ctx.fillStyle = '#ffdd44';
-    ctx.font = 'bold 15px Courier New';
-    ctx.textAlign = 'left';
-    ctx.fillText(`Output = ${puzzle.expected}`, outX + 88, outY + 5);
-
-    // Instruction
-    ctx.fillStyle = '#888';
-    ctx.font = '13px Courier New';
-    ctx.textAlign = 'center';
-    ctx.fillText('▼  Select the correct gate  ▼', W / 2, 258);
-
-    // ── Option buttons (4 choices) ──
-    const btnW = 120, btnH = 48, gap = 20;
-    const total = puzzle.options.length * btnW + (puzzle.options.length - 1) * gap;
-    const startX = (W - total) / 2;
-
-    puzzle.options.forEach((opt, i) => {
-      const bx = startX + i * (btnW + gap);
-      const by = 270;
-      opt.rect = { x: bx, y: by, w: btnW, h: btnH };
-
-      // Hover glow is expensive to detect, use simple fill
-      ctx.shadowColor = '#4488ff';
-      ctx.shadowBlur  = 6;
-      ctx.fillStyle   = '#0d1a2e';
-      ctx.fillRect(bx, by, btnW, btnH);
-      ctx.strokeStyle = '#4488ff';
-      ctx.lineWidth   = 2;
-      ctx.strokeRect(bx, by, btnW, btnH);
-      ctx.shadowBlur  = 0;
-
-      ctx.fillStyle = '#88bbff';
-      ctx.font = 'bold 18px Courier New';
-      ctx.textAlign = 'center';
-      ctx.fillText(opt.label, bx + btnW / 2, by + 30);
+    // Platforms
+    platforms.forEach((p, i) => {
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, p.w, p.h);
+      ctx.strokeStyle = i === 1 ? '#88ff88' : '#888866';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(p.x, p.y, p.w, p.h);
+      if (i === 1) {
+        ctx.fillStyle = '#88ff8888';
+        ctx.font = '10px Courier New';
+        ctx.textAlign = 'center';
+        ctx.fillText('LAND HERE', p.x + p.w/2, p.y - 6);
+      }
     });
 
-    // Round indicator dots
-    for (let i = 0; i < TOTAL_ROUNDS; i++) {
+    // Rope anchor
+    ctx.fillStyle = '#8b7355';
+    ctx.fillRect(rope.ax - 8, rope.ay - 12, 16, 12);
+    ctx.strokeStyle = '#666';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(rope.ax - 8, rope.ay - 12, 16, 12);
+
+    if (!released) {
+      // Draw rope
+      ctx.strokeStyle = '#c8a060';
+      ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(W / 2 - (TOTAL_ROUNDS - 1) * 14 / 2 + i * 14, 368, 5, 0, Math.PI * 2);
-      ctx.fillStyle = i < round ? '#ff69b4' : '#333';
+      ctx.moveTo(rope.ax, rope.ay);
+      ctx.lineTo(player.x, player.y);
+      ctx.stroke();
+
+      // Rope tension visual
+      ctx.strokeStyle = '#e8c080';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(rope.ax, rope.ay);
+      // slight sag
+      const midX = (rope.ax + player.x) / 2 + Math.cos(rope.angle) * 8;
+      const midY = (rope.ay + player.y) / 2 + 6;
+      ctx.quadraticCurveTo(midX, midY, player.x, player.y);
+      ctx.stroke();
+    } else if (flying) {
+      // Shadow below player
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      const shadowY = platforms[1].y;
+      ctx.beginPath();
+      ctx.ellipse(player.x + player.w/2, shadowY, 20, 5, 0, 0, Math.PI*2);
       ctx.fill();
-      ctx.strokeStyle = '#ff69b4';
+    }
+
+    // Player (pixel boy hanging / flying)
+    drawPlayerPixel(ctx, player.x, player.y, !released);
+
+    // Result feedback
+    if (landed) {
+      ctx.fillStyle = '#88ff88';
+      ctx.font = 'bold 22px Courier New';
+      ctx.textAlign = 'center';
+      ctx.globalAlpha = Math.min(1, resultTimer / 15);
+      ctx.fillText('LANDED! ✓', W/2, H/2 - 30);
+      ctx.globalAlpha = 1;
+    } else if (failFall) {
+      ctx.fillStyle = '#ff4444';
+      ctx.font = 'bold 22px Courier New';
+      ctx.textAlign = 'center';
+      ctx.globalAlpha = Math.min(1, resultTimer / 15);
+      ctx.fillText('MISSED!', W/2, H/2 - 30);
+      ctx.globalAlpha = 1;
+    }
+
+    // Swing angle indicator (helps timing)
+    if (!released) {
+      const anglePct = (rope.angle + 1.1) / 2.2; // 0..1
+      const good = anglePct > 0.55 && anglePct < 0.75;
+      ctx.fillStyle = good ? '#88ff8844' : '#ffffff11';
+      ctx.fillRect(W - 28, 50, 18, H - 80);
+      ctx.fillStyle = good ? '#88ff88' : '#ff8844';
+      const indicatorY = 50 + (1 - anglePct) * (H - 80);
+      ctx.fillRect(W - 32, indicatorY - 4, 26, 8);
+      ctx.fillStyle = '#ffffff88';
+      ctx.font = '9px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText(good ? '▶ NOW!' : 'WAIT', W - 20, indicatorY - 8);
+    }
+
+    // Instruction
+    ctx.fillStyle = '#ffffff44';
+    ctx.font = '12px Courier New';
+    ctx.textAlign = 'center';
+    ctx.fillText('[SPACE] or [CLICK] to release', W/2, H - 10);
+
+    // Round dots
+    for (let i = 0; i < TOTAL_SWINGS; i++) {
+      ctx.beginPath();
+      ctx.arc(W/2 - (TOTAL_SWINGS-1)*14/2 + i*14, 18, 5, 0, Math.PI*2);
+      ctx.fillStyle = i < round ? '#88ff88' : (i === round ? '#ffdd44' : '#333');
+      ctx.fill();
+      ctx.strokeStyle = '#88ff88';
       ctx.lineWidth = 1;
       ctx.stroke();
     }
-
-    animFrame = requestAnimationFrame(render);
   }
 
-  function drawWire(ctx, x1, y1, x2, y2, color) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    const mx = (x1 + x2) / 2;
-    ctx.bezierCurveTo(mx, y1, mx, y2, x2, y2);
-    ctx.stroke();
-    // Dot at end
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.arc(x2, y2, 3, 0, Math.PI * 2);
-    ctx.fill();
+  function drawPlayerPixel(ctx, x, y, hanging) {
+    // Body
+    ctx.fillStyle = '#4a90d9';
+    ctx.fillRect(x + 2, y + 12, 16, 18);
+    // Head
+    ctx.fillStyle = '#f5cba7';
+    ctx.fillRect(x + 4, y, 12, 14);
+    // Hair
+    ctx.fillStyle = '#2c1a0e';
+    ctx.fillRect(x + 4, y, 12, 5);
+    // Arms up when hanging
+    if (hanging) {
+      ctx.fillStyle = '#f5cba7';
+      ctx.fillRect(x - 4, y + 2, 8, 5);   // left arm up
+      ctx.fillRect(x + 16, y + 2, 8, 5);  // right arm up
+    }
+    // Legs
+    ctx.fillStyle = '#2c4a7a';
+    ctx.fillRect(x + 4, y + 30, 5, 10);
+    ctx.fillRect(x + 11, y + 30, 5, 10);
   }
 
   return { start, stop };

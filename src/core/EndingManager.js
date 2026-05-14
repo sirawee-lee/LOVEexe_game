@@ -24,7 +24,7 @@ const EndingManager = (() => {
       key = 'ending_niupai';
     } else if (s.foundEasterEgg) {
       key = 'ending_secret';
-    } else if (s.girlDone && s.hearts >= 3 && s.affinity >= 60) {
+    } else if (s.girlDone && s.hearts >= 3) {
       key = 'ending_true_love';
     } else if (s.neverRomantic && s.professorDone && s.niupaiDone && s.fatherDone) {
       key = 'ending_eecs_overload';

@@ -101,6 +101,7 @@ const HUDController = (() => {
     rBtn.onclick = () => {
       result.classList.remove('active');
       GameManager.showScreen('game');
+      PlayerController.setDialogueOpen(false);
       if (onContinue) onContinue();
     };
   }
