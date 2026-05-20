@@ -169,9 +169,25 @@ const PlayerController = (() => {
     if (dist < 80) GameManager.feedDog();
   }
 
+  let lastTime = 0;
+  let accumulator = 0;
+  let STEP = 1 / 100;
+
   // ── Update loop ────────────────────────────────────────────
-  function loop() {
-    update();
+  function loop(timestamp) {
+    if(!lastTime) lastTime = timestamp;
+
+    let frameTime = (timestamp - lastTime) / 1000;
+    lastTime = timestamp;
+
+    frameTime = Math.min(frameTime, 0.2);
+    accumulator += frameTime;
+
+    while (accumulator >= STEP) {
+      update();
+      accumulator -= STEP;
+    }
+
     render();
     animFrame = requestAnimationFrame(loop);
   }
