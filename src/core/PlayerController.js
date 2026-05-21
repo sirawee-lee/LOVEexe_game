@@ -13,6 +13,8 @@ const PlayerController = (() => {
   let dialogueOpen = false;
   let initialized  = false;
   let animFrame    = null;
+  let running      = false;
+  let keyUpHandler = null;
 
   // Dog companion state
   let dog = { x: 0, y: 0, visible: false, trail: [], askTimer: 0 };
@@ -91,11 +93,17 @@ const PlayerController = (() => {
     NPCManager.reset();
 
     document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup',   e => { keys[e.key.toLowerCase()] = false; });
+    keyUpHandler = e => { keys[e.key.toLowerCase()] = false; };
+    document.addEventListener('keyup', keyUpHandler);
+    lastTime = 0;
+    accumulator = 0;
+    running = true;
     requestAnimationFrame(loop);
   }
 
   function onKeyDown(e) {
+    if (!isGameScreenActive()) return;
+
     const k = e.key.toLowerCase();
     keys[k] = true;
 
@@ -113,6 +121,8 @@ const PlayerController = (() => {
 
   // ── Interaction ────────────────────────────────────────────
   function tryInteract() {
+    if (!isGameScreenActive()) return;
+
     const reach = 60;
     const pr = expandRect(player, reach);
 
@@ -154,6 +164,7 @@ const PlayerController = (() => {
   }
 
   function launchMiniGame(game) {
+    pause();
     GameManager.showScreen('minigame');
     if      (game === 'professor') MiniGame_Professor.start();
     else if (game === 'niupai')    MiniGame_NiuPai.start();
@@ -162,6 +173,8 @@ const PlayerController = (() => {
   }
 
   function tryFeedDog() {
+    if (!isGameScreenActive()) return;
+
     const s = GameManager.getState();
     if (!s.dogUnlocked) return;
     if (!dog.visible) return;
@@ -175,6 +188,11 @@ const PlayerController = (() => {
 
   // ── Update loop ────────────────────────────────────────────
   function loop(timestamp) {
+    if (!running) return;
+    if (!isGameScreenActive()) {
+      animFrame = requestAnimationFrame(loop);
+      return;
+    }
     if(!lastTime) lastTime = timestamp;
 
     let frameTime = (timestamp - lastTime) / 1000;
@@ -193,6 +211,7 @@ const PlayerController = (() => {
   }
 
   function update() {
+    if (!isGameScreenActive()) return;
     if (dialogueOpen) return;
 
     let dx = 0, dy = 0;
@@ -622,6 +641,11 @@ const PlayerController = (() => {
 
   function setDialogueOpen(val) { dialogueOpen = val; }
 
+  function isGameScreenActive() {
+    const gameScreen = document.getElementById('screen-game');
+    return !!(gameScreen && gameScreen.classList.contains('active'));
+  }
+
   function onGirlMet() {
     GameManager.meetGirl();
     dog.visible = true;
@@ -630,12 +654,42 @@ const PlayerController = (() => {
   }
 
   function stop() {
-    if (animFrame) cancelAnimationFrame(animFrame);
+    running = false;
+    if (animFrame) {
+      cancelAnimationFrame(animFrame);
+      animFrame = null;
+    }
     initialized = false;
     document.removeEventListener('keydown', onKeyDown);
+    if (keyUpHandler) {
+      document.removeEventListener('keyup', keyUpHandler);
+      keyUpHandler = null;
+    }
   }
 
-  return { init, stop, setDialogueOpen, onGirlMet };
+  function pause() {
+    if (!initialized || !running) return;
+    running = false;
+    if (animFrame) {
+      cancelAnimationFrame(animFrame);
+      animFrame = null;
+    }
+    document.removeEventListener('keydown', onKeyDown);
+    if (keyUpHandler) document.removeEventListener('keyup', keyUpHandler);
+  }
+
+  function resume() {
+    if (!initialized || running) return;
+    document.addEventListener('keydown', onKeyDown);
+    if (keyUpHandler) document.addEventListener('keyup', keyUpHandler);
+    keys = {};
+    lastTime = 0;
+    accumulator = 0;
+    running = true;
+    requestAnimationFrame(loop);
+  }
+
+  return { init, stop, pause, resume, setDialogueOpen, onGirlMet };
 })();
 
 window.PlayerController = PlayerController;
